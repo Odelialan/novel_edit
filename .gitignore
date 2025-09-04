@@ -1,0 +1,108 @@
+# 敏感信息文件
+AI_API_KEY.md
+*.env
+.env
+secrets/
+**/secrets/
+**/ai_keys.json
+**/users.json
+
+# 日志文件
+logs/
+**/logs/
+*.log
+
+# 已创作的小说内容（保留AI提示词）
+novel_repo/novel001/
+novel_repo/novel002/
+novel_repo/测试文档/
+novel_repo/产品功能需求.md
+novel_repo/产品需求.md
+
+# 虚拟环境
+venv/
+env/
+ENV/
+.venv/
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Next.js build files
+.next/
+frontend/.next/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 操作系统
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# 测试文件
+test_*.py
+*_test.py
+debug_*.py
+extract_quotes.py
+
+# 临时文件
+*.tmp
+*.temp
+*.bak
+*.backup
+
+# Docker
+.dockerignore
+
+# 说明文档（保留README.md）
+PowerShell使用说明.md
+AI提示词保存问题修复报告.md
+项目目录结构说明.md
+
+# 资料文件夹
+资料/
+
+# 案例文件
+案例1.txt
+第一章-东皇钟*
+女主角.json
+
+# MCP相关文件
+mcp/
+
+# 其他临时文件
+*.md.bak

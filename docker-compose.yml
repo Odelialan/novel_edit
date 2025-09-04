@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./novel_repo:/data/novel_repo
+      - ./secrets:/data/secrets
+      - ./logs:/data/logs
+    environment:
+      - NOVEL_REPO_PATH=/data/novel_repo
+      - SECRETS_PATH=/data/secrets
+      - LOGS_PATH=/data/logs
+      - DEBUG=true
+      - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN:-31rO5I3GTPQ0afK5dhTYG5Fiedl_5CSrB7fV6ganx8BfwzvaR}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ngrok服务（可选）
+  ngrok:
+    image: wernight/ngrok
+    environment:
+      NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN:-31rO5I3GTPQ0afK5dhTYG5Fiedl_5CSrB7fV6ganx8BfwzvaR}
+    command: http backend:8000
+    depends_on:
+      - backend
+    profiles:
+      - ngrok  # 使用profile控制是否启动
+    restart: unless-stopped
+
+volumes:
+  novel_data:
+  logs_data: 

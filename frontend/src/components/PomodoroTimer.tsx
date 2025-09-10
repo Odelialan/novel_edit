@@ -125,7 +125,8 @@ export default function PomodoroTimer({ onSessionComplete }: PomodoroTimerProps)
     }
     
     // 回调通知
-    onSessionComplete?.(sessionType, 
+    onSessionComplete?.(
+      sessionType === 'work' ? 'work' : 'break', 
       sessionType === 'work' ? settings.workDuration : 
       sessionType === 'shortBreak' ? settings.shortBreakDuration : 
       settings.longBreakDuration

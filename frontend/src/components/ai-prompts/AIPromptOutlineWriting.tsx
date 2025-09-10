@@ -72,7 +72,17 @@ export default function AIPromptOutlineWriting({ novelId, onBack }: AIPromptOutl
       if (response.ok) {
         const result = await response.json()
         if (result.ok) {
-          setOutlineWritingPrompts(result.data?.prompts?.outline_writing || {})
+          const outlineData = result.data?.prompts?.outline || {}
+          console.log('大纲提示词数据:', outlineData)
+          // 将outline数据转换为outline_writing格式
+          const outlineWritingData = {}
+          Object.keys(outlineData).forEach(key => {
+            outlineWritingData[key] = {
+              random: outlineData[key],
+              targeted: outlineData[key] // 使用相同的内容作为targeted
+            }
+          })
+          setOutlineWritingPrompts(outlineWritingData)
         }
       }
     } catch (error) {

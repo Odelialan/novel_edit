@@ -144,6 +144,8 @@ async def get_novel_stats_overview(
         meta = config.get("meta", {})
         
         stats = {
+            "title": config.get("title", novel_id),
+            "slug": config.get("slug", novel_id),
             "total_words": total_words,
             "total_words_no_punctuation": total_words_no_punctuation,
             "total_chapters": len(chapters),

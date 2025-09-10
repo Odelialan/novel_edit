@@ -121,6 +121,9 @@ class AIPolishRequest(BaseModel):
 class AISummarizeRequest(BaseModel):
     text: str
     max_sentences: int = 3
+    summary_type: str = "chapter"
+    novel_id: str = None
+    chapter_number: int = None
 
 class AIResponse(BaseModel):
     result_text: str

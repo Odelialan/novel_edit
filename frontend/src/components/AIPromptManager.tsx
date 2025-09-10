@@ -231,14 +231,45 @@ export default function AIPromptManager({ novelId, onPromptSelect }: AIPromptMan
   )
 
   const renderPromptSection = (title: string, data: any, type: string) => {
-    if (!data || typeof data !== 'object') return null
+    if (!data) return null
+    
+    // 如果data是字符串，直接显示
+    if (typeof data === 'string') {
+      return (
+        <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ padding: '24px 24px 16px 24px', flexShrink: 0, borderBottom: '1px solid #f0f0f0' }}>
+            <Title level={4} style={{ margin: 0 }}>{title}</Title>
+          </div>
+          <div className="ai-prompt-scrollbar" style={{ 
+            flex: 1,
+            overflowY: 'auto', 
+            overflowX: 'hidden',
+            padding: '24px'
+          }}>
+            {renderPromptEditor('default', data, type)}
+          </div>
+        </div>
+      )
+    }
+    
+    // 如果data不是对象，返回null
+    if (typeof data !== 'object') return null
     
     return (
-      <div>
-        <Title level={4}>{title}</Title>
-        {Object.entries(data).map(([key, value]) => 
-          renderPromptEditor(key, value as string, type)
-        )}
+      <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ padding: '24px 24px 16px 24px', flexShrink: 0, borderBottom: '1px solid #f0f0f0' }}>
+          <Title level={4} style={{ margin: 0 }}>{title}</Title>
+        </div>
+        <div className="ai-prompt-scrollbar" style={{ 
+          flex: 1,
+          overflowY: 'auto', 
+          overflowX: 'hidden',
+          padding: '24px'
+        }}>
+          {Object.entries(data).map(([key, value]) => 
+            renderPromptEditor(key, value as string, type)
+          )}
+        </div>
       </div>
     )
   }
@@ -283,21 +314,57 @@ export default function AIPromptManager({ novelId, onPromptSelect }: AIPromptMan
 
   // 渲染主页面
   return (
-    <Card title="AI提示词管理" loading={loading}>
-      <div style={{ marginBottom: 16 }}>
-        <Button 
-          type="primary" 
-          icon={<PlusOutlined />} 
-          onClick={() => setIsModalVisible(true)}
-        >
-          添加新提示词
-        </Button>
-        <Text style={{ marginLeft: 16, color: '#666' }}>
-          {novelId ? '小说级提示词（仅当前小说可见）' : '全局提示词（所有小说可见）'}
-        </Text>
-      </div>
+    <div
+      className="ai-prompt-root"
+      style={{
+        height: '100%',            // 依赖父级（MainApp Content + wrapper）的高度
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+        minHeight: 0,
+        maxWidth: '1200px',        // 适中的最大宽度，不限制太严格
+        margin: '0 auto',          // 居中显示
+        width: '100%'              // 充分利用可用空间
+      }}
+    >
+      <Card
+        title="AI提示词管理"
+        loading={loading}
+        style={{
+          height: '100%',
+          display: 'flex',
+          flexDirection: 'column'
+        }}
+        styles={{
+          body: {
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            padding: 0,
+            overflow: 'hidden',
+            minHeight: 0
+          }
+        }}
+      >
+        <div style={{ padding: '16px 24px', flexShrink: 0, borderBottom: '1px solid #f0f0f0' }}>
+          <Button 
+            type="primary" 
+            icon={<PlusOutlined />} 
+            onClick={() => setIsModalVisible(true)}
+          >
+            添加新提示词
+          </Button>
+          <Text style={{ marginLeft: 16, color: '#666' }}>
+            {novelId ? '小说级提示词（仅当前小说可见）' : '全局提示词（所有小说可见）'}
+          </Text>
+        </div>
 
-      <Tabs defaultActiveKey="expand">
+        <div style={{ flex: 1, overflow: 'hidden' }}>
+          <Tabs 
+            defaultActiveKey="expand"
+            style={{ height: '100%' }}
+            tabBarStyle={{ marginBottom: 0, padding: '0 24px' }}
+          >
         <TabPane tab="扩写提示词" key="expand">
           {renderPromptSection('扩写提示词', prompts.expand, 'expand')}
         </TabPane>
@@ -306,8 +373,12 @@ export default function AIPromptManager({ novelId, onPromptSelect }: AIPromptMan
           {renderPromptSection('润色提示词', prompts.polish, 'polish')}
         </TabPane>
         
-        <TabPane tab="总结提示词" key="summary">
-          {renderPromptSection('总结提示词', prompts.summary, 'summary')}
+        <TabPane tab="章节概要" key="summary">
+          {renderPromptSection('章节概要提示词', prompts.summary, 'summary')}
+        </TabPane>
+        
+        <TabPane tab="全文概要" key="full_summary">
+          {renderPromptSection('全文概要提示词', prompts.full_summary, 'full_summary')}
         </TabPane>
         
         <TabPane tab="世界观提示词" key="world">
@@ -335,26 +406,30 @@ export default function AIPromptManager({ novelId, onPromptSelect }: AIPromptMan
           } 
           key="character"
         >
-          <div style={{ textAlign: 'center', padding: '40px 20px' }}>
-            <Title level={4}>角色设计提示词管理</Title>
-            <Text type="secondary">点击上方"进入"按钮进入角色设计管理页面</Text>
-            <br />
-            <Button 
-              type="primary" 
-              icon={<ArrowRightOutlined />} 
-              onClick={() => setCurrentView('character')}
-              style={{ marginTop: 16 }}
-            >
-              进入角色设计管理
-            </Button>
+          <div style={{ height: 'calc(100% - 40px)', overflow: 'hidden' }}>
+            <div style={{ textAlign: 'center', padding: '40px 20px' }}>
+              <Title level={4}>角色设计提示词管理</Title>
+              <Text type="secondary">点击上方"进入"按钮进入角色设计管理页面</Text>
+              <br />
+              <Button 
+                type="primary" 
+                icon={<ArrowRightOutlined />} 
+                onClick={() => setCurrentView('character')}
+                style={{ marginTop: 16 }}
+              >
+                进入角色设计管理
+              </Button>
+            </div>
           </div>
         </TabPane>
         
         <TabPane tab="大纲编写" key="outline_writing">
-          <AIPromptOutlineWriting 
-            novelId={novelId}
-            onBack={() => setCurrentView('main')}
-          />
+          <div className="ai-prompt-scrollbar" style={{ height: '100%', overflow: 'auto' }}>
+            <AIPromptOutlineWriting 
+              novelId={novelId}
+              onBack={() => setCurrentView('main')}
+            />
+          </div>
         </TabPane>
         
         <TabPane 
@@ -374,26 +449,28 @@ export default function AIPromptManager({ novelId, onPromptSelect }: AIPromptMan
           } 
           key="outline"
         >
-          {currentView === 'outline' ? (
-            <AIPromptOutlineSettings 
-              novelId={novelId} 
-              onBack={() => setCurrentView('main')}
-            />
-          ) : (
-            <div style={{ textAlign: 'center', padding: '40px 20px' }}>
-              <Title level={4}>大纲生成提示词管理</Title>
-              <Text type="secondary">点击上方"进入"按钮进入大纲生成管理页面</Text>
-              <br />
-              <Button 
-                type="primary" 
-                icon={<ArrowRightOutlined />} 
-                onClick={() => setCurrentView('outline')}
-                style={{ marginTop: 16 }}
-              >
-                进入大纲生成管理
-              </Button>
-            </div>
-          )}
+          <div className="ai-prompt-scrollbar" style={{ height: '100%', overflow: 'auto' }}>
+            {(currentView as string) === 'outline' ? (
+              <AIPromptOutlineSettings 
+                novelId={novelId} 
+                onBack={() => setCurrentView('main')}
+              />
+            ) : (
+              <div style={{ textAlign: 'center', padding: '40px 20px' }}>
+                <Title level={4}>大纲生成提示词管理</Title>
+                <Text type="secondary">点击上方"进入"按钮进入大纲生成管理页面</Text>
+                <br />
+                <Button 
+                  type="primary" 
+                  icon={<ArrowRightOutlined />} 
+                  onClick={() => setCurrentView('outline')}
+                  style={{ marginTop: 16 }}
+                >
+                  进入大纲生成管理
+                </Button>
+              </div>
+            )}
+          </div>
         </TabPane>
         
         <TabPane 
@@ -413,28 +490,32 @@ export default function AIPromptManager({ novelId, onPromptSelect }: AIPromptMan
           } 
           key="overview"
         >
-          {currentView === 'overview' ? (
-            <AIPromptOverview 
-              novelId={novelId} 
-              onBack={() => setCurrentView('main')}
-            />
-          ) : (
-            <div style={{ textAlign: 'center', padding: '40px 20px' }}>
-              <Title level={4}>AI提示词总览</Title>
-              <Text type="secondary">点击上方"进入"按钮查看风格提示词总览</Text>
-              <br />
-              <Button 
-                type="primary" 
-                icon={<ArrowRightOutlined />} 
-                onClick={() => setCurrentView('overview')}
-                style={{ marginTop: 16 }}
-              >
-                进入总览页面
-              </Button>
-            </div>
-          )}
+          <div className="ai-prompt-scrollbar" style={{ height: '100%', overflow: 'auto' }}>
+            {(currentView as string) === 'overview' ? (
+              <AIPromptOverview 
+                novelId={novelId} 
+                onBack={() => setCurrentView('main')}
+              />
+            ) : (
+              <div style={{ textAlign: 'center', padding: '40px 20px' }}>
+                <Title level={4}>AI提示词总览</Title>
+                <Text type="secondary">点击上方"进入"按钮查看风格提示词总览</Text>
+                <br />
+                <Button 
+                  type="primary" 
+                  icon={<ArrowRightOutlined />} 
+                  onClick={() => setCurrentView('overview')}
+                  style={{ marginTop: 16 }}
+                >
+                  进入总览页面
+                </Button>
+              </div>
+            )}
+          </div>
         </TabPane>
-      </Tabs>
+          </Tabs>
+        </div>
+      </Card>
 
       <Modal
         title="添加新提示词"
@@ -452,10 +533,10 @@ export default function AIPromptManager({ novelId, onPromptSelect }: AIPromptMan
               options={[
                 { label: '扩写提示词', value: 'expand' },
                 { label: '润色提示词', value: 'polish' },
-                { label: '总结提示词', value: 'summary' },
+                { label: '章节概要提示词', value: 'summary' },
+                { label: '全文概要提示词', value: 'full_summary' },
                 { label: '世界观提示词', value: 'world' },
                 { label: '灵感提示词', value: 'inspiration' },
-
                 { label: '风格提示词', value: 'styles' }
               ]}
             />
@@ -479,7 +560,7 @@ export default function AIPromptManager({ novelId, onPromptSelect }: AIPromptMan
           </Form.Item>
         </Form>
       </Modal>
-    </Card>
+    </div>
   )
 }
 

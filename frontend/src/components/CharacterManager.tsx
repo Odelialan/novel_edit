@@ -1,15 +1,14 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Card, Button, Space, Input, Modal, Form, Typography, Tag, Popconfirm, Table, Avatar, Select, Tabs, App } from 'antd'
-import { UserOutlined, PlusOutlined, EditOutlined, DeleteOutlined, TeamOutlined, ShareAltOutlined } from '@ant-design/icons'
+import { Card, Button, Space, Input, Modal, Form, Typography, Tag, Popconfirm, Avatar, Select, Tabs, App, Pagination } from 'antd'
+import { UserOutlined, PlusOutlined, EditOutlined, DeleteOutlined, TeamOutlined, ShareAltOutlined, RobotOutlined } from '@ant-design/icons'
 import { useAuthStore } from '@/store/authStore'
 import CharacterRelationshipGraph from './CharacterRelationshipGraph'
 
 const { Title, Text } = Typography
 const { Search } = Input
 const { TextArea } = Input
-const { TabPane } = Tabs
 
 interface Character {
   id: string
@@ -29,8 +28,8 @@ interface Character {
   updated_at: string
   role_type?: string
   profile?: Record<string, any>
-  tags?: string[] // 新增 tags 字段
-  importance?: string // 新增 importance 字段
+  tags?: string[]
+  importance?: string
 }
 
 interface CharacterManagerProps {
@@ -48,82 +47,78 @@ export default function CharacterManager({ novelId }: CharacterManagerProps) {
   const [createForm] = Form.useForm()
   const [editForm] = Form.useForm()
   const { token } = useAuthStore()
-  
-  // 新增筛选状态
-  const [selectedTags, setSelectedTags] = useState<string[]>([])
-  const [selectedImportance, setSelectedImportance] = useState<string>('')
-  const [selectedRoleType, setSelectedRoleType] = useState<string>('')
-  const [availableTags, setAvailableTags] = useState<string[]>([])
+  const [aiLoading, setAiLoading] = useState(false)
+  const [aiForm] = Form.useForm()
+  const [aiResults, setAiResults] = useState<any[]>([])
+  const [showPromptModal, setShowPromptModal] = useState(false)
+  const [currentPrompt, setCurrentPrompt] = useState('')
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize] = useState(1) // 每页只显示一个角色
   
   const roleTypeOptions = [
-    { label: '女主角', value: '女主角' },
-    { label: '男主角', value: '男主角' },
-    { label: '女二', value: '女二' },
-    { label: '男二', value: '男二' },
-    { label: '女三', value: '女三' },
-    { label: '男三', value: '男三' },
-    { label: '配角', value: '配角' }
+    { value: '男主角', label: '男主角' },
+    { value: '女主角', label: '女主角' },
+    { value: '配角', label: '配角' },
+    { value: '女二', label: '女二' },
+    { value: '男二', label: '男二' },
+    { value: '反派', label: '反派' }
   ]
-  
-  const importanceOptions = [
-    { label: '主要角色', value: 'main' },
-    { label: '重要配角', value: 'supporting' },
-    { label: '次要角色', value: 'minor' }
-  ]
-  
-  const [aiForm] = Form.useForm()
-  const [aiLoading, setAiLoading] = useState(false)
-  const [aiResults, setAiResults] = useState<Array<{ role_type: string, data: any }>>([])
-  const [detailCharacter, setDetailCharacter] = useState<Character | null>(null)
-  const [showPromptModal, setShowPromptModal] = useState(false)
-  const [currentPrompt, setCurrentPrompt] = useState<string>('')
-
-  useEffect(() => {
-    loadCharacters()
-  }, [novelId])
-
-  // 提取所有可用标签
-  useEffect(() => {
-    if (characters.length > 0) {
-      const allTags = new Set<string>()
-      characters.forEach(char => {
-        if (char.tags) {
-          char.tags.forEach(tag => allTags.add(tag))
-        }
-      })
-      setAvailableTags(Array.from(allTags))
-    }
-  }, [characters])
 
   const loadCharacters = async () => {
+    if (!token || !novelId) return
+    
     setIsLoading(true)
     try {
       const response = await fetch(`/api/novels/${encodeURIComponent(novelId)}/characters`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+        headers: { 'Authorization': `Bearer ${token}` }
       })
       
       if (response.ok) {
-        const result = await response.json()
-        if (result.ok) {
-          const list = Array.isArray(result.data?.characters) ? result.data.characters : (Array.isArray(result.data) ? result.data : [])
-          setCharacters(list)
-        }
+        const data = await response.json()
+        console.log('加载角色响应数据:', data)
+        console.log('data.data:', data.data)
+        console.log('data.data.characters:', data.data?.characters)
+        const characters = data.data?.characters || []
+        console.log('最终角色数组:', characters)
+        setCharacters(characters)
+        console.log('设置角色列表完成，当前characters状态:', characters)
+      } else {
+        console.error('加载角色失败，状态码:', response.status)
+        message.error('加载角色失败')
       }
     } catch (error) {
-      message.error('加载角色列表失败')
+      console.error('加载角色失败:', error)
+      message.error('加载角色失败，请稍后重试')
     } finally {
       setIsLoading(false)
     }
   }
 
+  useEffect(() => {
+    loadCharacters()
+  }, [novelId, token])
+
+  const filteredCharacters = characters.filter(character => 
+    character.name.toLowerCase().includes(searchText.toLowerCase()) ||
+    character.aliases.some(alias => alias.toLowerCase().includes(searchText.toLowerCase()))
+  )
+
+  // 分页逻辑
+  const totalPages = Math.ceil(filteredCharacters.length / pageSize)
+  const startIndex = (currentPage - 1) * pageSize
+  const endIndex = startIndex + pageSize
+  const currentCharacters = filteredCharacters.slice(startIndex, endIndex)
+  const currentCharacter = currentCharacters[0] // 当前页的角色
+
+  // 调试信息
+  console.log('当前characters状态:', characters)
+  console.log('当前filteredCharacters状态:', filteredCharacters)
+  console.log('搜索文本:', searchText)
+
   const handleCreateCharacter = async (values: any) => {
+    if (!token || !novelId) return
+
     try {
-      let profileObj: any = undefined
-      if (values.profile) {
-        try { profileObj = JSON.parse(values.profile) } catch {}
-      }
       const response = await fetch(`/api/novels/${encodeURIComponent(novelId)}/characters`, {
         method: 'POST',
         headers: {
@@ -131,43 +126,30 @@ export default function CharacterManager({ novelId }: CharacterManagerProps) {
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
-          name: values.name,
-          aliases: values.aliases ? values.aliases.split(',').map((s: string) => s.trim()) : [],
-          tags: values.tags ? values.tags.split(',').map((s: string) => s.trim()).filter((s: string) => !!s) : [],
-          importance: values.importance || undefined,
-          gender: values.gender,
-          age: values.age ? parseInt(values.age) : undefined,
-          appearance: values.appearance,
-          personality: values.personality,
-          relationships: values.relationships || [],
-          notes: values.notes,
-          role_type: values.role_type,
-          profile: profileObj
+          ...values,
+          aliases: values.aliases ? values.aliases.split(',').map((alias: string) => alias.trim()) : [],
+          relationships: values.relationships || []
         })
       })
 
       if (response.ok) {
-        const result = await response.json()
-        if (result.ok) {
           message.success('角色创建成功')
           setIsCreateModalVisible(false)
           createForm.resetFields()
           loadCharacters()
-        }
+      } else {
+        message.error('角色创建失败')
       }
     } catch (error) {
-      message.error('创建角色失败')
+      console.error('创建角色失败:', error)
+      message.error('创建角色失败，请稍后重试')
     }
   }
 
   const handleEditCharacter = async (values: any) => {
-    if (!editingCharacter) return
+    if (!token || !novelId || !editingCharacter) return
 
     try {
-      let profileObj: any = undefined
-      if (values.profile) {
-        try { profileObj = JSON.parse(values.profile) } catch {}
-      }
       const response = await fetch(`/api/novels/${encodeURIComponent(novelId)}/characters/${encodeURIComponent(editingCharacter.id)}`, {
         method: 'PUT',
         headers: {
@@ -175,313 +157,89 @@ export default function CharacterManager({ novelId }: CharacterManagerProps) {
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
-          name: values.name,
-          aliases: values.aliases ? values.aliases.split(',').map((s: string) => s.trim()) : [],
-          tags: values.tags ? values.tags.split(',').map((s: string) => s.trim()).filter((s: string) => !!s) : [],
-          importance: values.importance || undefined,
-          gender: values.gender,
-          age: values.age ? parseInt(values.age) : undefined,
-          appearance: values.appearance,
-          personality: values.personality,
-          relationships: values.relationships || [],
-          notes: values.notes,
-          role_type: values.role_type,
-          profile: profileObj
+          ...values,
+          aliases: values.aliases ? values.aliases.split(',').map((alias: string) => alias.trim()) : [],
+          relationships: values.relationships || []
         })
       })
 
       if (response.ok) {
-        const result = await response.json()
-        if (result.ok) {
           message.success('角色更新成功')
           setIsEditModalVisible(false)
           setEditingCharacter(null)
           editForm.resetFields()
           loadCharacters()
-        }
+      } else {
+        message.error('角色更新失败')
       }
     } catch (error) {
-      message.error('更新角色失败')
+      console.error('更新角色失败:', error)
+      message.error('更新角色失败，请稍后重试')
     }
   }
 
   const handleDeleteCharacter = async (characterId: string) => {
+    if (!token || !novelId) return
+
     try {
       const response = await fetch(`/api/novels/${encodeURIComponent(novelId)}/characters/${encodeURIComponent(characterId)}`, {
         method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+        headers: { 'Authorization': `Bearer ${token}` }
       })
 
       if (response.ok) {
         message.success('角色删除成功')
         loadCharacters()
+      } else {
+        message.error('角色删除失败')
       }
     } catch (error) {
-      message.error('删除角色失败')
+      console.error('删除角色失败:', error)
+      message.error('删除角色失败，请稍后重试')
     }
   }
 
   const openEditModal = (character: Character) => {
     setEditingCharacter(character)
     editForm.setFieldsValue({
-      name: character.name,
+      ...character,
       aliases: character.aliases.join(', '),
-      gender: character.gender,
-      age: character.age,
-      appearance: character.appearance,
-      personality: character.personality,
-      relationships: character.relationships,
-      notes: character.notes,
-      role_type: character.role_type,
-      profile: character.profile ? JSON.stringify(character.profile, null, 2) : undefined
+      profile: character.profile ? JSON.stringify(character.profile, null, 2) : ''
     })
     setIsEditModalVisible(true)
   }
 
-  // 高级筛选逻辑
-  const filteredCharacters = (Array.isArray(characters) ? characters : []).filter(character => {
-    // 文本搜索
-    const textMatch = character.name.toLowerCase().includes(searchText.toLowerCase()) ||
-      character.aliases.some(alias => alias.toLowerCase().includes(searchText.toLowerCase()))
-    
-    // 标签筛选
-    const tagMatch = selectedTags.length === 0 || 
-      (character.tags && selectedTags.some(tag => character.tags!.includes(tag)))
-    
-    // 重要性筛选
-    const importanceMatch = !selectedImportance || character.importance === selectedImportance
-    
-    // 角色类型筛选
-    const roleTypeMatch = !selectedRoleType || character.role_type === selectedRoleType
-    
-    return textMatch && tagMatch && importanceMatch && roleTypeMatch
-  })
+  const handleAiGenerate = async () => {
+    if (!token || !novelId) return
 
-  const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([])
-  const rowSelection = {
-    selectedRowKeys,
-    onChange: (keys: React.Key[]) => setSelectedRowKeys(keys)
-  }
-
-  const columns = [
-    {
-      title: '角色',
-      key: 'name',
-      render: (character: Character) => (
-        <div className="flex items-center">
-          <Avatar icon={<UserOutlined />} className="mr-3" />
-          <div>
-            <div className="font-medium">{character.name}</div>
-            {character.aliases.length > 0 && (
-              <div className="text-xs text-gray-500">
-                别名: {character.aliases.join(', ')}
-              </div>
-            )}
-          </div>
-        </div>
-      )
-    },
-    {
-      title: '角色类型',
-      dataIndex: 'role_type',
-      key: 'role_type',
-      render: (role: string) => role || '-'
-    },
-    {
-      title: '性别',
-      dataIndex: 'gender',
-      key: 'gender',
-      render: (gender: string) => gender ? (
-        <Tag color={gender === 'male' ? 'blue' : 'pink'}>{gender === 'male' ? '男' : '女'}</Tag>
-      ) : '-'
-    },
-    {
-      title: '年龄',
-      dataIndex: 'age',
-      key: 'age',
-      render: (age: number) => age || '-'
-    },
-    {
-      title: '性格',
-      dataIndex: 'personality',
-      key: 'personality',
-      render: (personality: string) => personality ? (
-        <Text className="line-clamp-2">{personality}</Text>
-      ) : '-'
-    },
-    {
-      title: '关系',
-      key: 'relationships',
-      render: (character: Character) => (
-        <div className="space-y-1">
-          {character.relationships.map((rel, index) => (
-            <Tag key={index} color="green">
-              {rel.relation}
-            </Tag>
-          ))}
-        </div>
-      )
-    },
-    {
-      title: '操作',
-      key: 'actions',
-      render: (character: Character) => (
-        <Space>
-          <Button
-            type="text"
-            onClick={() => setDetailCharacter(character)}
-            size="small"
-          >
-            详情
-          </Button>
-          <Button
-            type="text"
-            icon={<EditOutlined />}
-            onClick={() => openEditModal(character)}
-            size="small"
-          >
-            编辑
-          </Button>
-          <Popconfirm
-            title="确定要删除这个角色吗？"
-            description="删除后无法恢复。"
-            onConfirm={() => handleDeleteCharacter(character.id)}
-            okText="确定"
-            cancelText="取消"
-          >
-            <Button
-              type="text"
-              danger
-              icon={<DeleteOutlined />}
-              size="small"
-            >
-              删除
-            </Button>
-          </Popconfirm>
-        </Space>
-      )
-    }
-  ]
-
-  return (
-    <div className="max-w-6xl mx-auto">
-      <div className="flex justify-between items-center mb-6">
-        <Title level={3} className="!mb-0">
-          <TeamOutlined className="mr-2" />
-          角色管理
-        </Title>
-        <Button
-          type="primary"
-          icon={<PlusOutlined />}
-          onClick={() => setIsCreateModalVisible(true)}
-        >
-          创建角色
-        </Button>
-      </div>
-
-      <div className="mb-4">
-        <Search
-          placeholder="搜索角色姓名或别名..."
-          value={searchText}
-          onChange={(e) => setSearchText(e.target.value)}
-          style={{ maxWidth: 400 }}
-        />
-      </div>
-
-      {/* 使用Tabs展示角色列表和关系图 */}
-      <Tabs 
-        defaultActiveKey="list" 
-        size="large"
-        items={[
-          {
-            key: 'list',
-            label: (
-              <span>
-                <TeamOutlined />
-                角色列表
-              </span>
-            ),
-            children: (
-          <div className="grid lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2">
-              <Table
-                columns={columns}
-                dataSource={filteredCharacters}
-                rowKey="id"
-                loading={isLoading}
-                rowSelection={rowSelection}
-                pagination={{
-                  pageSize: 10,
-                  showSizeChanger: true,
-                  showQuickJumper: true,
-                  showTotal: (total, range) => `第 ${range[0]}-${range[1]} 条，共 ${total} 条`
-                }}
-              />
-            </div>
-            <div className="lg:col-span-1 space-y-4">
-              {detailCharacter && (
-                <Card title={`角色详情：${detailCharacter.name}`} extra={<Button size="small" onClick={() => setDetailCharacter(null)}>关闭</Button>}>
-                  <div className="space-y-2 text-sm">
-                    <div><b>角色类型：</b>{detailCharacter.role_type || '-'}</div>
-                    <div><b>性别：</b>{detailCharacter.gender || '-'}</div>
-                    <div><b>年龄：</b>{detailCharacter.age || '-'}</div>
-                    <div><b>外貌：</b>{detailCharacter.appearance || '-'}</div>
-                    <div><b>性格：</b>{detailCharacter.personality || '-'}</div>
-                    {detailCharacter.profile && (
-                      <div className="space-y-1">
-                        <div><b>身份职业：</b>{detailCharacter.profile['身份职业'] || '-'}</div>
-                        <div><b>家庭关系：</b>{detailCharacter.profile['家庭关系'] || '-'}</div>
-                        <div><b>早年经历：</b>{detailCharacter.profile['早年经历'] || '-'}</div>
-                        <div><b>观念信仰：</b>{detailCharacter.profile['观念信仰'] || '-'}</div>
-                        <div><b>优点：</b>{detailCharacter.profile['优点'] || '-'}</div>
-                        <div><b>缺点：</b>{detailCharacter.profile['缺点'] || '-'}</div>
-                        <div><b>成就：</b>{detailCharacter.profile['成就'] || '-'}</div>
-                        <div><b>社会阶层：</b>{detailCharacter.profile['社会阶层'] || '-'}</div>
-                        <div><b>习惯嗜好：</b>{detailCharacter.profile['习惯嗜好'] || '-'}</div>
-                      </div>
-                    )}
-                  </div>
-                </Card>
-              )}
-              <Card title="AI 生成角色" extra={<Space>
-                <Button type="primary" loading={aiLoading} onClick={async () => {
                   try {
                     const v = await aiForm.validateFields()
                     const roles: string[] = v.role_types || []
-                    if (!roles.length) { message.warning('请先选择角色类型'); return }
+      if (!roles.length) { 
+        message.warning('请先选择角色类型')
+        return 
+      }
+
                     setAiLoading(true)
+      setAiResults([])
+
+      // 构建种子信息
+      const seed = {
+        name: v.character_name || '',
+        aliases: v.character_aliases ? v.character_aliases.split(',').map((s: string) => s.trim()) : [],
+        gender: v.character_gender || undefined,
+        age: v.character_age || undefined,
+        appearance: v.character_appearance || undefined,
+        personality: v.character_personality || undefined
+      }
                     
                     // 获取小说信息
-                    let novelInfo = ''
-                    try {
                       const novelRes = await fetch(`/api/novels/${encodeURIComponent(novelId)}`, {
                         headers: { 'Authorization': `Bearer ${token}` }
                       })
-                      if (novelRes.ok) {
-                        const novelData = await novelRes.json()
-                        if (novelData.ok && novelData.data?.novel_info) {
-                          const novel = novelData.data.novel_info
-                          const meta = novel.meta || {}
-                          novelInfo = `小说类型：${meta.genre || '未知'}\n篇幅：${meta.target_length || '未知'}\n标签：${(meta.tags || []).join(', ')}\n描述：${meta.description || '暂无描述'}`
-                        }
-                      }
-                    } catch (e) {
-                      console.warn('获取小说信息失败:', e)
-                    }
-                    
-                    const seed: any = {
-                      name: v.name,
-                      aliases: v.aliases ? v.aliases.split(',').map((s: string) => s.trim()) : [],
-                      gender: v.gender,
-                      age: v.age ? parseInt(v.age) : undefined,
-                      appearance: v.appearance,
-                      personality: v.personality,
-                      profile: v.profile ? JSON.parse(v.profile) : undefined
-                    }
-                    
-                    // 构建完整的故事信息
+      const novelData = novelRes.ok ? await novelRes.json() : {}
+      const novelInfo = `小说名称：${novelData.title || '未命名'}\n小说类型：${novelData.genre || '未设定'}\n故事背景：${novelData.background || '未设定'}`
+      
                     const fullStoryInfo = [novelInfo, v.story_info].filter(Boolean).join('\n\n')
                     
                     // 显示提示词内容
@@ -518,193 +276,273 @@ export default function CharacterManager({ novelId }: CharacterManagerProps) {
                       })
                       if (cRes.ok) created++
                     }
+      
+      if (created > 0) {
+        message.success(`成功生成 ${created} 个角色`)
+        console.log('AI生成成功，开始重新加载角色列表')
                     await loadCharacters()
-                    if (created > 0) message.success(`已根据类型生成 ${created} 个角色`)
-                    else message.error('生成失败，请调整输入后重试')
-                  } catch (e) {
-                    message.error('请检查表单输入')
+        console.log('角色列表重新加载完成')
+      } else {
+        message.warning('没有成功生成任何角色')
+      }
+    } catch (error) {
+      console.error('AI生成角色失败:', error)
+      message.error('AI生成角色失败，请稍后重试')
                   } finally {
                     setAiLoading(false)
                   }
-                }}>生成</Button>
-                <Button loading={aiLoading} onClick={async () => {
-                  try {
-                    // 自动获取小说信息并生成角色设计提示词
-                    setAiLoading(true)
-                    
-                    // 获取小说信息
-                    const novelInfoRes = await fetch(`/api/character-design/novel-info/${encodeURIComponent(novelId)}`, {
-                      headers: { 'Authorization': `Bearer ${token}` }
-                    })
-                    
-                    if (!novelInfoRes.ok) {
-                      throw new Error('获取小说信息失败')
-                    }
-                    
-                    const novelInfo = await novelInfoRes.json()
-                    if (!novelInfo.success) {
-                      throw new Error(novelInfo.message || '获取小说信息失败')
-                    }
-                    
-                    const { novel_type, outline, heroine_profile } = novelInfo.data
-                    
-                    // 获取选中的角色
-                    const selected = selectedRowKeys as string[]
-                    if (!selected?.length) {
-                      message.warning('请先勾选要生成设计的角色')
-                      return
-                    }
-                    
-                    // 显示提示词内容
-                    const selectedCharacters = characters.filter(c => selected.includes(c.id))
-                    const promptContent = `小说信息：\n类型：${novel_type}\n大纲：${outline}\n女主角信息：${heroine_profile || '无'}\n\n选中的角色：\n${selectedCharacters.map(c => `- ${c.name} (${c.role_type || '未知类型'})`).join('\n')}`
-                    setCurrentPrompt(promptContent)
-                    setShowPromptModal(true)
-                    
-                    let generatedCount = 0
-                    for (const charId of selected) {
-                      const character = characters.find(c => c.id === charId)
-                      if (!character) continue
-                      
-                      // 根据角色类型选择API
-                      const isHero = character.role_type === '男主角' || character.gender === '男'
-                      const endpoint = isHero ? '/api/character-design/design-hero' : '/api/character-design/design-heroine'
-                      
-                      // 构建角色设计要求
-                      const characterDesign = `角色姓名：${character.name}\n角色类型：${character.role_type || '未知'}\n性别：${character.gender || '未知'}\n年龄：${character.age || '未知'}\n外貌：${character.appearance || '待设定'}\n性格：${character.personality || '待设定'}`
-                      
-                      const requestData = {
-                        novel_type: novel_type || '未知类型',
-                        outline: outline || '暂无大纲',
-                        plot: '', // 可不传参
-                        character_design: characterDesign,
-                        heroine_profile: isHero ? heroine_profile : undefined
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+      <div className="max-w-7xl mx-auto p-6">
+        {/* 页面头部 */}
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <Title level={2} className="!mb-2 text-gray-800 flex items-center">
+                <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex items-center justify-center mr-3">
+                  <TeamOutlined className="text-white text-lg" />
+                </div>
+                角色管理
+              </Title>
+              <p className="text-gray-600 ml-11">管理小说中的角色设定和关系</p>
+            </div>
+            <Button 
+              type="primary" 
+              icon={<PlusOutlined />}
+              onClick={() => setIsCreateModalVisible(true)}
+              size="large"
+              className="shadow-lg hover:shadow-xl transition-all duration-300 bg-gradient-to-r from-blue-500 to-purple-600 border-0"
+            >
+              创建角色
+            </Button>
+          </div>
+          
+          {/* 搜索和筛选区域 */}
+          <div className="bg-white rounded-2xl shadow-lg p-6 mb-6 border border-gray-100">
+            <div className="flex flex-wrap items-center gap-4">
+              <Search
+                placeholder="搜索角色姓名或别名..."
+                value={searchText}
+                onChange={(e) => setSearchText(e.target.value)}
+                style={{ width: 300 }}
+                size="large"
+                className="flex-1 min-w-64"
+                prefix={<UserOutlined className="text-gray-400" />}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* 使用Tabs展示角色列表和关系图 */}
+        <Tabs 
+          defaultActiveKey="list" 
+          size="large"
+          className="bg-white rounded-2xl shadow-lg p-6"
+          items={[
+            {
+              key: 'list',
+              label: (
+                <span>
+                  <TeamOutlined />
+                  角色列表
+                </span>
+              ),
+              children: (
+                <div className="grid lg:grid-cols-3 gap-6">
+                  <div className="lg:col-span-2">
+                    {/* 角色统计头部 */}
+                    <div className="bg-white rounded-xl shadow-lg p-6 mb-6 border border-gray-100">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center">
+                          <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex items-center justify-center mr-3">
+                            <TeamOutlined className="text-white text-lg" />
+                          </div>
+                          <div>
+                            <h3 className="text-xl font-semibold text-gray-800">角色列表</h3>
+                            <p className="text-sm text-gray-600 mt-1">
+                              共 {filteredCharacters.length} 个角色
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <Tag color="blue" className="px-3 py-1">
+                            {filteredCharacters.filter(c => c.role_type === '男主角').length} 男主角
+                          </Tag>
+                          <Tag color="pink" className="px-3 py-1">
+                            {filteredCharacters.filter(c => c.role_type === '女主角').length} 女主角
+                          </Tag>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 角色卡片列表 */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                      {filteredCharacters.map((character) => (
+                        <Card
+                          key={character.id}
+                          className="shadow-lg hover:shadow-xl transition-all duration-300 border border-gray-100 hover:border-blue-300"
+                          actions={[
+                            <Button
+                              key="edit"
+                              type="text"
+                              icon={<EditOutlined />}
+                              onClick={() => openEditModal(character)}
+                              className="text-green-600 hover:text-green-700"
+                            >
+                              编辑
+                            </Button>,
+                            <Popconfirm
+                              key="delete"
+                              title="确定要删除这个角色吗？"
+                              description="删除后无法恢复。"
+                              onConfirm={() => handleDeleteCharacter(character.id)}
+                              okText="确定"
+                              cancelText="取消"
+                            >
+                              <Button
+                                type="text"
+                                danger
+                                icon={<DeleteOutlined />}
+                                className="text-red-600 hover:text-red-700"
+                              >
+                                删除
+                              </Button>
+                            </Popconfirm>
+                          ]}
+                        >
+                          {/* 角色头部信息 */}
+                          <div className="flex items-start mb-4">
+                            <Avatar 
+                              size={60}
+                              icon={<UserOutlined />} 
+                              className="mr-4 bg-gradient-to-r from-blue-500 to-purple-600 shadow-md"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center space-x-2 mb-2">
+                                <h4 className="text-lg font-semibold text-gray-800">{character.name}</h4>
+                                {character.role_type && (
+                                  <Tag 
+                                    color={character.role_type === '男主角' ? 'blue' : character.role_type === '女主角' ? 'pink' : 'green'}
+                                    className="px-2 py-1 rounded-full text-xs"
+                                  >
+                                    {character.role_type}
+                                  </Tag>
+                                )}
+                              </div>
+                              <div className="flex items-center space-x-3 text-sm text-gray-600">
+                                {character.gender && (
+                                  <Tag color={(character.gender === 'male' || character.gender === '男') ? 'blue' : 'pink'} className="px-2 py-1 rounded-full">
+                                    {(character.gender === 'male' || character.gender === '男') ? '男' : '女'}
+                                  </Tag>
+                                )}
+                                {character.age && (
+                                  <span className="bg-gray-100 px-2 py-1 rounded-full text-xs">
+                                    {character.age}岁
+                                  </span>
+                                )}
+                              </div>
+                              {character.aliases.length > 0 && (
+                                <div className="text-xs text-gray-500 mt-1">
+                                  别名: {character.aliases.join(', ')}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* 角色详细信息 */}
+                          <div className="space-y-3">
+                            {/* 身份职业 */}
+                            {character.profile?.['身份职业'] && (
+                              <div className="bg-blue-50 p-3 rounded-lg border-l-4 border-blue-400">
+                                <h5 className="text-sm font-medium text-blue-700 mb-1">身份职业</h5>
+                                <p className="text-sm text-gray-700">{character.profile['身份职业']}</p>
+                              </div>
+                            )}
+
+                            {/* 性格特点 */}
+                            {character.personality && (
+                              <div className="bg-green-50 p-3 rounded-lg border-l-4 border-green-400">
+                                <h5 className="text-sm font-medium text-green-700 mb-1">性格特点</h5>
+                                <p className="text-sm text-gray-700">{character.personality}</p>
+                              </div>
+                            )}
+
+                            {/* 外貌描述 */}
+                            {character.appearance && (
+                              <div className="bg-purple-50 p-3 rounded-lg border-l-4 border-purple-400">
+                                <h5 className="text-sm font-medium text-purple-700 mb-1">外貌描述</h5>
+                                <p className="text-sm text-gray-700">{character.appearance}</p>
+                              </div>
+                            )}
+
+                            {/* 社会阶层 */}
+                            {character.profile?.['社会阶层'] && (
+                              <div className="bg-gray-50 p-3 rounded-lg border-l-4 border-gray-400">
+                                <h5 className="text-sm font-medium text-gray-700 mb-1">社会阶层</h5>
+                                <p className="text-sm text-gray-700">{character.profile['社会阶层']}</p>
+                              </div>
+                            )}
+
+                            {/* 关系网络 */}
+                            {character.relationships.length > 0 && (
+                              <div className="bg-cyan-50 p-3 rounded-lg border-l-4 border-cyan-400">
+                                <h5 className="text-sm font-medium text-cyan-700 mb-2">关系网络</h5>
+                                <div className="flex flex-wrap gap-1">
+                                  {character.relationships.map((rel, index) => (
+                                    <Tag key={index} color="cyan" className="text-xs px-2 py-1">
+                                      {rel.relation}
+                                    </Tag>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </Card>
+                      ))}
+                    </div>
+
+                    {/* 分页 */}
+                    {filteredCharacters.length > 0 && (
+                      <div className="flex justify-center mt-6">
+                        <Pagination
+                          current={1}
+                          total={filteredCharacters.length}
+                          pageSize={6}
+                          showSizeChanger={false}
+                          showQuickJumper={false}
+                          showTotal={(total, range) => `第 ${range[0]}-${range[1]} 条，共 ${total} 条`}
+                          className="bg-white px-6 py-3 rounded-lg shadow-sm"
+                        />
+                      </div>
+                    )}
+                  </div>
+                  <div className="lg:col-span-1 space-y-4">
+                    {/* AI生成角色卡片 */}
+                    <Card 
+                      title={
+                        <div className="flex items-center">
+                          <div className="w-8 h-8 bg-gradient-to-r from-green-500 to-blue-500 rounded-lg flex items-center justify-center mr-3">
+                            <RobotOutlined className="text-white" />
+                          </div>
+                          <span className="text-lg font-semibold">AI 生成角色</span>
+                        </div>
                       }
-                      
-                      try {
-                        const designRes = await fetch(endpoint, {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify(requestData)
-                        })
-                        
-                        if (designRes.ok) {
-                          const designResult = await designRes.json()
-                          if (designResult.success) {
-                            // 将生成的提示词保存到角色备注中
-                            const updatedCharacter = {
-                              ...character,
-                              notes: `AI角色设计提示词：\n\n${designResult.data.prompt}\n\n---\n生成时间：${new Date().toLocaleString()}`
-                            }
-                            
-                            await fetch(`/api/novels/${encodeURIComponent(novelId)}/characters/${encodeURIComponent(charId)}`, {
-                              method: 'PUT',
-                              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                              body: JSON.stringify(updatedCharacter)
-                            })
-                            
-                            generatedCount++
-                          }
-                        }
-                      } catch (error) {
-                        console.error(`生成角色 ${character.name} 设计失败:`, error)
+                      className="shadow-lg border border-gray-100"
+                      extra={
+                        <Space>
+                          <Button 
+                            type="primary" 
+                            loading={aiLoading} 
+                            className="bg-gradient-to-r from-green-500 to-blue-500 border-0 shadow-md hover:shadow-lg transition-all"
+                            onClick={handleAiGenerate}
+                          >
+                            补齐所选
+                          </Button>
+                        </Space>
                       }
-                    }
-                    
-                    if (generatedCount > 0) {
-                      await loadCharacters()
-                      message.success(`已为 ${generatedCount} 个角色生成设计提示词`)
-                    } else {
-                      message.warning('没有成功生成任何角色设计')
-                    }
-                    
-                  } catch (error) {
-                    console.error('自动生成角色设计失败:', error)
-                    message.error('自动生成角色设计失败，请稍后重试')
-                  } finally {
-                    setAiLoading(false)
-                  }
-                }}>自动生成设计</Button>
-                <Button loading={aiLoading} onClick={async () => {
-                  try {
-                    if (!filteredCharacters.length) { message.info('请先选择左侧要补齐的角色'); return }
-                    const selected = selectedRowKeys as string[]
-                    if (!selected?.length) { message.warning('请在表格中勾选一个或多个角色'); return }
-                    const v = aiForm.getFieldsValue()
-                    setAiLoading(true)
-                    
-                    // 获取小说信息
-                    let novelInfo = ''
-                    try {
-                      const novelRes = await fetch(`/api/novels/${encodeURIComponent(novelId)}`, {
-                        headers: { 'Authorization': `Bearer ${token}` }
-                      })
-                      if (novelRes.ok) {
-                        const novelData = await novelRes.json()
-                        if (novelData.ok && novelData.data?.novel_info) {
-                          const novel = novelData.data.novel_info
-                          const meta = novel.meta || {}
-                          novelInfo = `小说类型：${meta.genre || '未知'}\n篇幅：${meta.target_length || '未知'}\n标签：${(meta.tags || []).join(', ')}\n描述：${meta.description || '暂无描述'}`
-                        }
-                      }
-                    } catch (e) {
-                      console.warn('获取小说信息失败:', e)
-                    }
-                    
-                    // 构建完整的故事信息
-                    const fullStoryInfo = [novelInfo, v.story_info].filter(Boolean).join('\n\n')
-                    
-                    for (const id of selected) {
-                      const c = characters.find(x => x.id === id)
-                      if (!c) continue
-                      // 用现有角色字段作为种子
-                      const seed = {
-                        name: c.name,
-                        aliases: c.aliases,
-                        gender: c.gender,
-                        age: c.age,
-                        appearance: c.appearance,
-                        personality: c.personality,
-                        role_type: c.role_type,
-                        profile: c.profile
-                      }
-                      const resp = await fetch('/api/ai/character/generate', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                        body: JSON.stringify({ novel_id: novelId, role_type: seed.role_type || (v.role_types?.[0] || '配角'), seed, story_info: fullStoryInfo })
-                      })
-                      const j = resp.ok ? await resp.json() : { ok: false }
-                      if (!j.ok) continue
-                      const aiResult = j.data?.profile || {}
-                      // 仅填补缺失字段
-                      const merged = {
-                        name: c.name || aiResult.name,
-                        aliases: c.aliases || [],
-                        gender: c.gender || aiResult.gender,
-                        age: c.age || aiResult.age,
-                        appearance: c.appearance || aiResult.appearance,
-                        personality: c.personality || aiResult.personality,
-                        role_type: c.role_type || aiResult.role_type,
-                        profile: { ...(c.profile || {}), ...(aiResult.profile || {}) }
-                      }
-                      await fetch(`/api/novels/${encodeURIComponent(novelId)}/characters/${encodeURIComponent(id)}`, {
-                        method: 'PUT',
-                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                        body: JSON.stringify(merged)
-                      })
-                      if (detailCharacter?.id === id) {
-                        setDetailCharacter({ ...detailCharacter, ...merged })
-                      }
-                    }
-                    await loadCharacters()
-                    message.success('已补齐所选角色')
-                  } catch (e) {
-                    message.error('补齐失败，请稍后重试')
-                  } finally {
-                    setAiLoading(false)
-                  }
-                }}>补齐所选</Button>
-              </Space>}>
+                    >
                 <Form form={aiForm} layout="vertical" initialValues={{}}>
                   <Form.Item name="role_types" label="角色类型（可多选）" rules={[{ required: true, message: '请选择至少一个角色类型' }]}>
                     <Select mode="multiple" options={roleTypeOptions} placeholder="选择要生成的角色类别" />
@@ -712,52 +550,14 @@ export default function CharacterManager({ novelId }: CharacterManagerProps) {
                   <Form.Item label="提示词（只读，来自 ai_character_prompts.json）">
                     <div className="text-xs text-gray-500">将自动按上方角色类型读取，无需在此维护。</div>
                   </Form.Item>
-                  <Form.Item name="name" label="角色姓名（可选）">
-                    <Input placeholder="留空可由AI建议" />
+                        <Form.Item name="story_info" label="故事信息（可选）">
+                          <TextArea rows={3} placeholder="有助于AI匹配设定，例如：古代言情/仙侠/校园等" />
                   </Form.Item>
-                  <Form.Item name="aliases" label="别名（可选）" extra="多个用逗号分隔">
-                    <Input />
-                  </Form.Item>
-                  <div className="grid grid-cols-2 gap-4">
-                    <Form.Item name="gender" label="性别">
-                      <Input placeholder="男/女" />
-                    </Form.Item>
-                    <Form.Item name="age" label="年龄">
-                      <Input type="number" />
-                    </Form.Item>
-                  </div>
-                  <Form.Item name="appearance" label="外貌（可选）">
-                    <TextArea rows={2} />
-                  </Form.Item>
-                  <Form.Item name="personality" label="性格（可选）">
-                    <TextArea rows={2} />
-                  </Form.Item>
-                  <Form.Item name="profile" label="已有设定（JSON，可选）">
-                    <TextArea rows={3} placeholder='{"身份职业":"...","家庭关系":"..."}' />
-                  </Form.Item>
-                  <Form.Item name="story_info" label="故事信息/标签（可选）">
+                        <Form.Item name="character_design" label="角色设计（可选）">
                     <TextArea rows={3} placeholder="有助于AI匹配设定，例如：古代言情/仙侠/校园等" />
                   </Form.Item>
                 </Form>
-                {aiResults.length > 0 && (
-                  <div className="mt-4 space-y-2">
-                    {aiResults.map((r, idx) => (
-                      <Card key={idx} size="small" title={<span>建议：<Tag color="geekblue">{r.role_type}</Tag></span>} extra={<Button size="small" onClick={() => {
-                        const p = r.data
-                        createForm.setFieldsValue({
-                          appearance: p.appearance,
-                          personality: p.personality,
-                          role_type: p.role_type || r.role_type,
-                          profile: p.profile ? JSON.stringify(p.profile, null, 2) : undefined
-                        })
-                        message.success('已应用到创建表单')
-                      }}>应用到表单</Button>}>
-                        <div className="text-xs text-gray-600 line-clamp-3">{(r.data?.appearance || '') + ' / ' + (r.data?.personality || '')}</div>
                       </Card>
-                    ))}
-                  </div>
-                )}
-              </Card>
             </div>
           </div>
             )
@@ -827,22 +627,23 @@ export default function CharacterManager({ novelId }: CharacterManagerProps) {
           </Form.Item>
 
           <Form.Item name="role_type" label="角色类型">
-            <Select options={roleTypeOptions} placeholder="选择角色类型（可选）" allowClear />
+              <Select placeholder="选择角色类型">
+                {roleTypeOptions.map(option => (
+                  <Select.Option key={option.value} value={option.value}>
+                    {option.label}
+                  </Select.Option>
+                ))}
+              </Select>
           </Form.Item>
 
-          <Form.Item name="importance" label="重要性">
-            <Select options={importanceOptions} placeholder="选择角色重要性" allowClear />
+            <Form.Item name="profile" label="详细设定（JSON格式）">
+              <TextArea rows={4} placeholder='{"身份职业": "修仙门派弟子", "家庭关系": "孤儿"}' />
           </Form.Item>
 
-          <Form.Item name="tags" label="标签（可选）" extra="多个标签用逗号分隔">
-            <Input placeholder="例如：反派, 智者, 导师" />
+            <Form.Item name="notes" label="备注">
+              <TextArea rows={2} placeholder="其他备注信息..." />
           </Form.Item>
 
-          <Form.Item name="profile" label="详细设定（JSON，可选）">
-            <TextArea rows={3} placeholder='可填：{"身份职业":"...","家庭关系":"..."}，留空亦可' />
-          </Form.Item>
-
-          {/* 关系编辑器 */}
           <Form.List name="relationships">
             {(fields, { add, remove }) => (
               <div>
@@ -865,17 +666,13 @@ export default function CharacterManager({ novelId }: CharacterManagerProps) {
             )}
           </Form.List>
 
-          <Form.Item name="notes" label="备注">
-            <TextArea rows={3} placeholder="其他需要记录的信息..." />
-          </Form.Item>
-
-          <Form.Item className="mb-0">
-            <Space className="w-full justify-end">
-              <Button onClick={() => setIsCreateModalVisible(false)}>
-                取消
-              </Button>
+            <Form.Item>
+              <Space>
               <Button type="primary" htmlType="submit">
                 创建角色
+              </Button>
+                <Button onClick={() => setIsCreateModalVisible(false)}>
+                  取消
               </Button>
             </Space>
           </Form.Item>
@@ -886,10 +683,7 @@ export default function CharacterManager({ novelId }: CharacterManagerProps) {
       <Modal
         title="编辑角色"
         open={isEditModalVisible}
-        onCancel={() => {
-          setIsEditModalVisible(false)
-          setEditingCharacter(null)
-        }}
+          onCancel={() => setIsEditModalVisible(false)}
         footer={null}
         width={600}
       >
@@ -932,22 +726,23 @@ export default function CharacterManager({ novelId }: CharacterManagerProps) {
           </Form.Item>
 
           <Form.Item name="role_type" label="角色类型">
-            <Select options={roleTypeOptions} placeholder="选择角色类型（可选）" allowClear />
+              <Select placeholder="选择角色类型">
+                {roleTypeOptions.map(option => (
+                  <Select.Option key={option.value} value={option.value}>
+                    {option.label}
+                  </Select.Option>
+                ))}
+              </Select>
           </Form.Item>
 
-          <Form.Item name="importance" label="重要性">
-            <Select options={importanceOptions} placeholder="选择角色重要性" allowClear />
+            <Form.Item name="profile" label="详细设定（JSON格式）">
+              <TextArea rows={4} placeholder='{"身份职业": "修仙门派弟子", "家庭关系": "孤儿"}' />
           </Form.Item>
 
-          <Form.Item name="tags" label="标签（可选）" extra="多个标签用逗号分隔">
-            <Input placeholder="例如：反派, 智者, 导师" />
+            <Form.Item name="notes" label="备注">
+              <TextArea rows={2} placeholder="其他备注信息..." />
           </Form.Item>
 
-          <Form.Item name="profile" label="详细设定（JSON，可选）">
-            <TextArea rows={3} placeholder='可填：{"身份职业":"...","家庭关系":"..."}，留空亦可' />
-          </Form.Item>
-
-          {/* 关系编辑器 */}
           <Form.List name="relationships">
             {(fields, { add, remove }) => (
               <div>
@@ -970,29 +765,22 @@ export default function CharacterManager({ novelId }: CharacterManagerProps) {
             )}
           </Form.List>
 
-          <Form.Item name="notes" label="备注">
-            <TextArea rows={3} placeholder="其他需要记录的信息..." />
-          </Form.Item>
-
-          <Form.Item className="mb-0">
-            <Space className="w-full justify-end">
-              <Button onClick={() => {
-                setIsEditModalVisible(false)
-                setEditingCharacter(null)
-              }}>
-                取消
-              </Button>
+            <Form.Item>
+              <Space>
               <Button type="primary" htmlType="submit">
                 更新角色
+              </Button>
+                <Button onClick={() => setIsEditModalVisible(false)}>
+                  取消
               </Button>
             </Space>
           </Form.Item>
         </Form>
       </Modal>
 
-      {/* 提示词显示Modal */}
+        {/* 提示词查看模态框 */}
       <Modal
-        title="AI提示词内容"
+          title="AI提示词"
         open={showPromptModal}
         onCancel={() => setShowPromptModal(false)}
         footer={[
@@ -1005,19 +793,18 @@ export default function CharacterManager({ novelId }: CharacterManagerProps) {
         <div style={{ maxHeight: '500px', overflow: 'auto' }}>
           <pre style={{ 
             whiteSpace: 'pre-wrap', 
-            wordBreak: 'break-word',
+              fontFamily: 'monospace',
             fontSize: '12px',
-            lineHeight: '1.4',
+              lineHeight: '1.5',
+              padding: '16px',
             backgroundColor: '#f5f5f5',
-            padding: '12px',
-            borderRadius: '4px',
             border: '1px solid #d9d9d9'
           }}>
             {currentPrompt}
           </pre>
         </div>
       </Modal>
-      
+      </div>
     </div>
   )
 } 

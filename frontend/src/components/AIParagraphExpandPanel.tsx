@@ -41,7 +41,9 @@ export default function AIParagraphExpandPanel({ novelId, onAppendResult, select
           }
         }
         if (tpl) setPromptTemplate(tpl)
-      } catch {}
+      } catch (error) {
+        console.error('加载提示词失败:', error)
+      }
     }
     loadPrompt()
   }, [novelId, token])

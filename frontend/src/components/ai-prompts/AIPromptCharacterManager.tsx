@@ -52,7 +52,9 @@ export default function AIPromptCharacterManager({ novelId, onBack }: AIPromptCh
       if (response.ok) {
         const result = await response.json()
         if (result.ok) {
-          setCharacterPrompts(result.data?.prompts?.character || {})
+          const characterData = result.data?.prompts?.character || {}
+          console.log('角色提示词数据:', characterData)
+          setCharacterPrompts(characterData)
         }
       }
     } catch (error) {
@@ -154,16 +156,36 @@ export default function AIPromptCharacterManager({ novelId, onBack }: AIPromptCh
 
   const renderCharacterTab = (character: string) => {
     const characterData = characterPrompts[character]
-    if (!characterData) return <Text type="secondary">暂无数据</Text>
+    console.log(`渲染角色 ${character} 的数据:`, characterData)
     
-    return (
-      <div>
-        <Title level={4}>{character}提示词</Title>
-        {Object.entries(characterData).map(([key, value]) => 
-          renderPromptEditor(key, value as string, character)
-        )}
-      </div>
-    )
+    if (!characterData) {
+      return <Text type="secondary">暂无数据</Text>
+    }
+    
+    // 如果characterData是字符串，直接显示
+    if (typeof characterData === 'string') {
+      return (
+        <div>
+          <Title level={4}>{character}提示词</Title>
+          {renderPromptEditor('default', characterData, character)}
+        </div>
+      )
+    }
+    
+    // 如果characterData是对象，按原来的方式处理
+    if (typeof characterData === 'object' && characterData !== null) {
+      return (
+        <div>
+          <Title level={4}>{character}提示词</Title>
+          {Object.entries(characterData).map(([key, value]) => 
+            renderPromptEditor(key, value as string, character)
+          )}
+        </div>
+      )
+    }
+    
+    // 其他情况，显示错误信息
+    return <Text type="secondary">数据格式错误</Text>
   }
 
   return (

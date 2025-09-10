@@ -2,27 +2,19 @@
 
 import { useState, useEffect } from 'react'
 import { Layout, Card, Select, Button, Space, Typography, Divider, Dropdown, Modal, Input, App } from 'antd'
-import { BookOutlined, PlusOutlined, SaveOutlined, DownloadOutlined, FileTextOutlined, FileWordOutlined } from '@ant-design/icons'
+import { BookOutlined, PlusOutlined, SaveOutlined, DownloadOutlined, FileTextOutlined, FileWordOutlined, DragOutlined } from '@ant-design/icons'
 import MonacoEditorComponent from './MonacoEditor'
-import AIPanel from './AIPanel'
-import AIRewritePanel from './AIRewritePanel'
-import AICharacterPanel from './AICharacterPanel'
-import AIParagraphExpandPanel from './AIParagraphExpandPanel'
+import dynamic from 'next/dynamic'
+
+// 直接导入MonacoEditor，避免双重包装
+const MonacoEditor = dynamic(() => import('@monaco-editor/react'), {
+  ssr: false,
+  loading: () => <div className="flex items-center justify-center h-full">加载中...</div>
+})
 import { useAuthStore } from '@/store/authStore'
-import ChapterSummaryPanel from './ChapterSummaryPanel'
 import VersionPanel from './VersionPanel'
 import ExportMenu from './ExportMenu'
-import ChapterReorder from './ChapterReorder'
-import AIWorldPanel from './AIWorldPanel'
-import CharacterGraph from './CharacterGraph'
-import TimelinePanel from './TimelinePanel'
-import WritingStatsPanel from './WritingStatsPanel'
-import PomodoroTimer from './PomodoroTimer'
-import WritingCalendar from './WritingCalendar'
-import ReformatPanel from './ReformatPanel'
-import WorldMapPanel from './WorldMapPanel'
-import PowerSystemPanel from './PowerSystemPanel'
-import HistoryPanel from './HistoryPanel'
+import SimplifiedAISidebar from './SimplifiedAISidebar'
 
 const { Sider, Content } = Layout
 const { Title, Text } = Typography
@@ -54,7 +46,6 @@ export default function ChapterEditor({ novelId, novelTitle }: ChapterEditorProp
   const [chapterContent, setChapterContent] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [newChapterTitle, setNewChapterTitle] = useState('')
-  const [selectedText, setSelectedText] = useState('')
   const { token } = useAuthStore()
   const { message } = App.useApp()
 
@@ -62,6 +53,10 @@ export default function ChapterEditor({ novelId, novelTitle }: ChapterEditorProp
   const [isRenameVisible, setIsRenameVisible] = useState(false)
   const [renameTitle, setRenameTitle] = useState('')
   const [renameOrder, setRenameOrder] = useState<number | ''>('')
+
+  // 拖拽排序状态
+  const [draggingId, setDraggingId] = useState<string | null>(null)
+  const [isSavingOrder, setIsSavingOrder] = useState(false)
 
   // 实时计算当前编辑内容的字数
   const calculateCurrentWordCount = (text: string) => {
@@ -293,6 +288,79 @@ export default function ChapterEditor({ novelId, novelTitle }: ChapterEditorProp
     }
   }
 
+  // 拖拽排序相关函数
+  const onDragStart = (chapterId: string) => {
+    setDraggingId(chapterId)
+  }
+
+  const onDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+  }
+
+  const onDrop = (targetChapterId: string) => {
+    if (!draggingId || draggingId === targetChapterId) {
+      setDraggingId(null)
+      return
+    }
+
+    const currentChapters = [...chapters]
+    const fromIndex = currentChapters.findIndex(c => c.id === draggingId)
+    const toIndex = currentChapters.findIndex(c => c.id === targetChapterId)
+    
+    if (fromIndex < 0 || toIndex < 0) {
+      setDraggingId(null)
+      return
+    }
+
+    // 重新排列章节
+    const [movedChapter] = currentChapters.splice(fromIndex, 1)
+    currentChapters.splice(toIndex, 0, movedChapter)
+
+    // 更新章节的order字段
+    const updatedChapters = currentChapters.map((chapter, index) => ({
+      ...chapter,
+      order: index + 1
+    }))
+
+    setChapters(updatedChapters)
+    setDraggingId(null)
+  }
+
+  const saveChapterOrder = async () => {
+    if (isSavingOrder) return
+
+    try {
+      setIsSavingOrder(true)
+      
+      // 依次更新每个章节的order
+      for (let i = 0; i < chapters.length; i++) {
+        const chapter = chapters[i]
+        const newOrder = i + 1
+        
+        if (chapter.order !== newOrder) {
+          await fetch(`/api/novels/${encodeURIComponent(novelId)}/chapters/${encodeURIComponent(chapter.id)}`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+              order: newOrder,
+              title: chapter.title
+            })
+          })
+        }
+      }
+
+      message.success('章节顺序已保存')
+      await loadChapters() // 重新加载以确保数据同步
+    } catch (error) {
+      message.error('保存章节顺序失败')
+    } finally {
+      setIsSavingOrder(false)
+    }
+  }
+
   const exportNovel = async (format: 'txt' | 'docx') => {
     try {
       const response = await fetch(`/api/utils/export/${encodeURIComponent(novelId)}?format=${format}`, {
@@ -334,180 +402,235 @@ export default function ChapterEditor({ novelId, novelTitle }: ChapterEditorProp
   }
 
   return (
-    <Layout className="h-full">
+    <Layout style={{ height: '100%' }}>
       <Sider width={300} className="bg-white border-r">
-        <div className="p-4">
-          <div className="flex justify-between items-center mb-4">
-            <Title level={4} className="!mb-0">
-              <BookOutlined className="mr-2" />
-              {novelTitle}
-            </Title>
+        <div className="h-full flex flex-col">
+          {/* 固定头部区域 */}
+          <div className="p-4 flex-shrink-0">
+            <div className="flex justify-between items-center mb-4">
+              <Title level={4} className="!mb-0">
+                <BookOutlined className="mr-2" />
+                {novelTitle}
+              </Title>
+              
+              <Space>
+                <Button 
+                  size="small" 
+                  type="primary" 
+                  icon={<SaveOutlined />} 
+                  loading={isSavingOrder}
+                  onClick={saveChapterOrder}
+                  title="保存章节顺序"
+                >
+                  保存顺序
+                </Button>
+                <ExportMenu novelId={novelId} />
+              </Space>
+            </div>
             
-            <ExportMenu novelId={novelId} />
-          </div>
-          
-          <div className="mb-4">
-            <Space.Compact className="w-full">
-              <input
-                type="text"
-                placeholder="新章节标题"
-                value={newChapterTitle}
-                onChange={(e) => setNewChapterTitle(e.target.value)}
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-l-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                onKeyPress={(e) => e.key === 'Enter' && createNewChapter()}
-              />
-              <Button
-                type="primary"
-                icon={<PlusOutlined />}
-                onClick={createNewChapter}
-                className="rounded-l-none"
-              >
-                新建
-              </Button>
-            </Space.Compact>
+            <div className="mb-4">
+              <Space.Compact className="w-full">
+                <input
+                  type="text"
+                  placeholder="新章节标题"
+                  value={newChapterTitle}
+                  onChange={(e) => setNewChapterTitle(e.target.value)}
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-l-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  onKeyPress={(e) => e.key === 'Enter' && createNewChapter()}
+                />
+                <Button
+                  type="primary"
+                  icon={<PlusOutlined />}
+                  onClick={createNewChapter}
+                  className="rounded-l-none"
+                >
+                  新建
+                </Button>
+              </Space.Compact>
+            </div>
+
+            <Divider />
           </div>
 
-          <Divider />
-
-          <div className="space-y-2">
-            {chapters.map((chapter) => (
-              <Card
-                key={chapter.id}
-                size="small"
-                className={`cursor-pointer hover:shadow-md transition-shadow ${
-                  currentChapter?.id === chapter.id ? 'ring-2 ring-blue-500' : ''
-                }`}
-                onClick={() => selectChapter(chapter)}
-                actions={[
-                  <Button
-                    key="rename"
-                    type="text"
-                    size="small"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      openRenameModal(chapter)
-                    }}
-                  >
-                    重命名
-                  </Button>,
-                  <Button
-                    key="delete"
-                    type="text"
-                    danger
-                    size="small"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      deleteChapter(chapter.id)
-                    }}
-                  >
-                    删除
-                  </Button>
-                ]}
-              >
-                <div>
-                  <Text strong>{`${String(chapter.order).padStart(3, '0')}. ${chapter.title}`}</Text>
-                  <br />
-                  <Text type="secondary" className="text-xs">
-                    总字数: {chapter.word_count?.total || 0}
-                  </Text>
-                  <br />
-                  <Text type="secondary" className="text-xs">
-                    纯文字: {chapter.word_count?.no_punctuation || 0}
-                  </Text>
-                </div>
-              </Card>
-            ))}
+          {/* 可滚动的章节列表区域 */}
+          <div className="flex-1 overflow-y-auto px-4 pb-4">
+            <div className="space-y-2">
+              {chapters.map((chapter, index) => (
+                <Card
+                  key={chapter.id}
+                  size="small"
+                  className={`cursor-pointer hover:shadow-md transition-all ${
+                    currentChapter?.id === chapter.id ? 'ring-2 ring-blue-500' : ''
+                  } ${
+                    draggingId === chapter.id ? 'opacity-50 bg-blue-50' : ''
+                  }`}
+                  onClick={() => selectChapter(chapter)}
+                  draggable
+                  onDragStart={() => onDragStart(chapter.id)}
+                  onDragOver={onDragOver}
+                  onDrop={() => onDrop(chapter.id)}
+                  actions={[
+                    <Button
+                      key="rename"
+                      type="text"
+                      size="small"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        openRenameModal(chapter)
+                      }}
+                    >
+                      重命名
+                    </Button>,
+                    <Button
+                      key="delete"
+                      type="text"
+                      danger
+                      size="small"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        deleteChapter(chapter.id)
+                      }}
+                    >
+                      删除
+                    </Button>
+                  ]}
+                >
+                  <div className="flex items-center gap-2">
+                    <DragOutlined className="text-gray-400 cursor-move" />
+                    <div className="flex-1">
+                      <Text strong>{`${String(index + 1).padStart(3, '0')}. ${chapter.title}`}</Text>
+                      <br />
+                      <Text type="secondary" className="text-xs">
+                        总字数: {chapter.word_count?.total || 0}
+                      </Text>
+                      <br />
+                      <Text type="secondary" className="text-xs">
+                        纯文字: {chapter.word_count?.no_punctuation || 0}
+                      </Text>
+                    </div>
+                  </div>
+                </Card>
+              ))}
+            </div>
+            <div className="text-xs text-gray-400 mt-2 text-center">
+              拖拽章节卡片可调整顺序，点击"保存顺序"生效
+            </div>
           </div>
         </div>
       </Sider>
 
-      <Content className="p-4">
+      <Content className="p-4" style={{ height: '100%', overflow: 'hidden' }}>
         {currentChapter ? (
-          <div className="h-full grid grid-cols-1 lg:grid-cols-3 gap-4">
-            {/* 章节信息和字数统计栏 */}
-            <div className="lg:col-span-2 mb-4 p-3 bg-white rounded-lg border shadow-sm">
-              <div className="flex justify-between items-center">
-                <div>
-                  <Title level={4} className="!mb-1">
-                    {`${String(currentChapter.order).padStart(3, '0')}. ${currentChapter.title}`}
-                  </Title>
-                  <Text type="secondary">章节 {currentChapter.order}</Text>
-                </div>
-                <div className="text-right">
-                  <div className="space-x-4">
-                    <span className="text-sm">
-                      <Text strong>总字数: </Text>
-                      <Text type="secondary">{currentWordCount.total}</Text>
-                    </span>
-                    <span className="text-sm">
-                      <Text strong>纯文字: </Text>
-                      <Text type="secondary">{currentWordCount.no_punctuation}</Text>
-                    </span>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 h-full">
+            {/* 中间：章节编辑区域 */}
+            <div className="lg:col-span-2">
+              <Card
+                title={
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <Title level={4} className="!mb-1">
+                        {`${String(currentChapter.order).padStart(3, '0')}. ${currentChapter.title}`}
+                      </Title>
+                      <Text type="secondary">章节 {currentChapter.order}</Text>
+                    </div>
+                    <div className="text-right">
+                      <div className="space-x-4">
+                        <span className="text-sm">
+                          <Text strong>总字数: </Text>
+                          <Text type="secondary">{currentWordCount.total}</Text>
+                        </span>
+                        <span className="text-sm">
+                          <Text strong>纯文字: </Text>
+                          <Text type="secondary">{currentWordCount.no_punctuation}</Text>
+                        </span>
+                      </div>
+                      <div className="text-xs text-gray-400 mt-1">
+                        实时统计
+                      </div>
+                    </div>
                   </div>
-                  <div className="text-xs text-gray-400 mt-1">
-                    实时统计
-                  </div>
-                </div>
-              </div>
-            </div>
-            
-            {/* 编辑器 + AI 面板 */}
-            <div className="lg:col-span-2 flex-1">
-              <MonacoEditorComponent
-                value={chapterContent}
-                onChange={setChapterContent}
-                onSave={saveChapter}
-                novelId={novelId}
-                chapterId={currentChapter.id}
-                language="markdown"
-                theme="vs-dark"
-                onExposeEditorApi={(api) => { (window as any).__editorApi = api }}
-                onSelectionChange={(api) => {
-                  try {
-                    const selection = api?.getSelection()
-                    const selectedText = api?.getModel()?.getValueInRange(selection) || ''
-                    setSelectedText(selectedText)
-                  } catch (e) {
-                    // 忽略选择错误
-                  }
-                }}
-              />
-            </div>
-            <div className="lg:col-span-1 space-y-4">
-              <ChapterSummaryPanel 
-                novelId={novelId} 
-                getText={() => chapterContent} 
-                currentChapter={currentChapter}
-              />
-              <ChapterReorder
-                novelId={novelId}
-                chapters={chapters.map(c => ({ id: c.id, title: c.title, order: c.order }))}
-                onReordered={() => loadChapters()}
-              />
-              <AIPanel novelId={novelId} onAppendResult={(text) => setChapterContent(prev => prev + text)} />
-              <AIParagraphExpandPanel 
-                novelId={novelId} 
-                onAppendResult={(text) => setChapterContent(prev => prev + text)}
-                selectedText={selectedText}
-              />
-              <AIRewritePanel novelId={novelId} editorApi={null} />
-              <CharacterGraph novelId={novelId} />
-              <TimelinePanel novelId={novelId} />
-              <WritingStatsPanel novelId={novelId} />
-              <PomodoroTimer onSessionComplete={(type, duration) => {
-                if (type === 'work') {
-                  message.success(`完成了一个 ${duration} 分钟的专注写作时段！`)
                 }
-              }} />
-              <WritingCalendar novelId={novelId} />
-              <ReformatPanel 
-                getText={() => chapterContent} 
-                onTextChange={(newText) => setChapterContent(newText)} 
+                extra={
+                  <Space>
+                    <Button type="primary" icon={<SaveOutlined />} onClick={saveChapter}>
+                      保存
+                    </Button>
+                  </Space>
+                }
+                className="h-full"
+                styles={{ body: { height: 'calc(100% - 60px)', padding: 0, overflow: 'hidden' } }}
+              >
+                <div className="h-full" style={{ overflow: 'hidden', position: 'relative' }}>
+                  <div style={{ 
+                    height: '100%', 
+                    width: '100%',
+                    overflow: 'auto',
+                    border: '1px solid #d9d9d9',
+                    borderRadius: '6px',
+                    position: 'relative'
+                  }}>
+                    <MonacoEditor
+                    height="100%"
+                    language="markdown"
+                    theme="vs-dark"
+                    value={chapterContent}
+                    onChange={(value) => setChapterContent(value || '')}
+                    options={{
+                      wordWrap: 'on',
+                      lineNumbers: 'on',
+                      minimap: { enabled: true },
+                      fontSize: 14,
+                      fontFamily: 'Consolas, "Courier New", monospace',
+                      automaticLayout: true,
+                      scrollBeyondLastLine: true,
+                      folding: true,
+                      lineDecorationsWidth: 10,
+                      lineNumbersMinChars: 3,
+                      scrollbar: {
+                        vertical: 'auto',
+                        horizontal: 'auto',
+                        verticalScrollbarSize: 12,
+                        horizontalScrollbarSize: 12,
+                        useShadows: true,
+                        verticalHasArrows: false,
+                        horizontalHasArrows: false,
+                        verticalSliderSize: 12,
+                        horizontalSliderSize: 12,
+                        arrowSize: 11,
+                      },
+                    }}
+                    onMount={(editor) => {
+                      // 暴露编辑器API
+                      const api = {
+                        getSelectedText: () => {
+                          const sel = editor.getSelection()
+                          return sel ? editor.getModel()?.getValueInRange(sel) || '' : ''
+                        },
+                        replaceSelection: (text: string) => {
+                          const sel = editor.getSelection()
+                          if (sel) editor.executeEdits('replace-selection', [{ range: sel, text }])
+                        },
+                        insertAtCursor: (text: string) => {
+                          const pos = editor.getPosition()
+                          if (pos) editor.executeEdits('insert-at-cursor', [{ range: { startLineNumber: pos.lineNumber, startColumn: pos.column, endLineNumber: pos.lineNumber, endColumn: pos.column }, text }])
+                        }
+                      }
+                      ;(window as any).__editorApi = api
+                    }}
+                    />
+                  </div>
+                </div>
+              </Card>
+            </div>
+
+            {/* 右侧：AI 面板 */}
+            <div className="lg:col-span-1">
+              <SimplifiedAISidebar
+                novelId={novelId}
+                chapterContent={chapterContent}
+                currentChapter={currentChapter}
+                onAppendResult={(text) => setChapterContent(prev => prev + text)}
               />
-              <WorldMapPanel novelId={novelId} />
-              <HistoryPanel novelId={novelId} />
-              <PowerSystemPanel novelId={novelId} />
-              <VersionPanel novelId={novelId} onRestored={() => loadChapters()} />
             </div>
           </div>
         ) : (

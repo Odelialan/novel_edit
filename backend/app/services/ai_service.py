@@ -23,8 +23,10 @@ class AIService:
                          input_summary: str, style: str = "default", 
                          max_tokens: int = 1000) -> str:
         """扩写文本（增强版，包含完整上下文）"""
-        if self.provider == "mock":
-            return await self._mock_expand(input_summary, max_tokens)
+        
+        # 如果没有提供提示词模板，从文件加载默认提示词
+        if not prompt_template or prompt_template.strip() == "":
+            prompt_template = await self._load_expand_prompt(style)
         
         # 自动替换提示词中的占位符
         additional_context = {
@@ -59,30 +61,67 @@ class AIService:
         elif self.provider == "gemini":
             return await self._gemini_expand_enhanced(full_prompt, enhanced_context, style, max_tokens)
         else:
-            return "暂不支持该AI提供者"
+            return "请配置有效的AI提供者（openai或gemini）"
     
     async def polish_text(self, text: str, preserve_content: bool = True, 
-                         style: str = "default") -> str:
+                         style: str = "default", novel_id: str = None) -> str:
         """润色文本"""
-        if self.provider == "mock":
-            return await self._mock_polish(text)
-        elif self.provider == "openai":
-            return await self._openai_polish(text, preserve_content, style)
-        elif self.provider == "gemini":
-            return await self._gemini_polish(text, preserve_content, style)
+        
+        # 加载润色提示词
+        prompt_template = await self._load_polish_prompt(style)
+        
+        # 如果有novel_id，进行占位符替换
+        if novel_id:
+            additional_context = {
+                "ORIGINAL_TEXT": text,
+                "STYLE": style
+            }
+            prompt_template = await self._auto_replace_placeholders(prompt_template, novel_id, additional_context)
         else:
-            return "暂不支持该AI提供者"
+            # 简单替换
+            prompt_template = prompt_template.replace("{ORIGINAL_TEXT}", text)
+            prompt_template = prompt_template.replace("{STYLE}", style)
+        
+        if self.provider == "openai":
+            return await self._openai_polish_enhanced(text, prompt_template, preserve_content, style)
+        elif self.provider == "gemini":
+            return await self._gemini_polish_enhanced(text, prompt_template, preserve_content, style)
+        else:
+            return "请配置有效的AI提供者（openai或gemini）"
     
-    async def summarize_text(self, text: str, max_sentences: int = 3) -> str:
+    async def summarize_text(self, text: str, max_sentences: int = 3, summary_type: str = "chapter", novel_id: str = None, chapter_number: int = None) -> str:
         """总结文本"""
-        if self.provider == "mock":
-            return await self._mock_summarize(text, max_sentences)
-        elif self.provider == "openai":
-            return await self._openai_summarize(text, max_sentences)
-        elif self.provider == "gemini":
-            return await self._gemini_summarize(text, max_sentences)
+        
+        # 加载摘要提示词
+        prompt_template = await self._load_summary_prompt(summary_type)
+        
+        # 如果有novel_id，进行占位符替换
+        if novel_id and summary_type == "chapter":
+            # 直接替换通用占位符
+            prompt_template = prompt_template.replace("{CHAPTER_CONTENT_XXX}", text)
+            prompt_template = prompt_template.replace("{MAX_SENTENCES}", str(max_sentences))
+            
+            # 然后进行其他占位符替换
+            additional_context = {
+                "MAX_SENTENCES": str(max_sentences)
+            }
+            prompt_template = await self._auto_replace_placeholders(prompt_template, novel_id, additional_context)
+        elif novel_id and summary_type == "full_novel":
+            additional_context = {
+                "MAX_SENTENCES": str(max_sentences)
+            }
+            prompt_template = await self._auto_replace_placeholders(prompt_template, novel_id, additional_context)
         else:
-            return "暂不支持该AI提供者"
+            # 简单替换
+            prompt_template = prompt_template.replace("{TEXT}", text)
+            prompt_template = prompt_template.replace("{MAX_SENTENCES}", str(max_sentences))
+        
+        if self.provider == "openai":
+            return await self._openai_summarize_enhanced(text, prompt_template, max_sentences)
+        elif self.provider == "gemini":
+            return await self._gemini_summarize_enhanced(text, prompt_template, max_sentences)
+        else:
+            return "请配置有效的AI提供者（openai或gemini）"
     
     async def generate_character_profile(
         self,
@@ -93,46 +132,35 @@ class AIService:
         prompt_key: str | None
     ) -> dict:
         """根据提示词与部分已知字段，让AI补全标准化角色设定结构。"""
-        # 读取角色提示词 - 优先尝试新的分散文件结构（每个角色一个文件）
-        prompts = {}
-        try:
-            import json as _json
-            role_key = role_type or seed.get("role_type") or "配角"
-            
-            # 优先尝试新的分散文件结构：novel_repo/ai_prompts/character/角色名.json
-            character_dir = file_service.novel_repo_path / "ai_prompts" / "character"
-            character_file = character_dir / f"{role_key}.json"
-            
-            if character_file.exists():
-                with open(character_file, 'r', encoding='utf-8') as f:
-                    prompts = _json.load(f) or {}
-            else:
-                # 回退到旧的文件结构：novel_repo/ai_prompts/character.json
-                character_file = file_service.novel_repo_path / "ai_prompts" / "character.json"
-                if character_file.exists():
-                    with open(character_file, 'r', encoding='utf-8') as f:
-                        prompts = _json.load(f) or {}
-                else:
-                    # 最后回退到最旧的文件结构：novel_repo/ai_character_prompts.json
-                    old_file = file_service.novel_repo_path / "ai_character_prompts.json"
-                    if old_file.exists():
-                        with open(old_file, 'r', encoding='utf-8') as f:
-                            prompts = _json.load(f) or {}
-        except Exception:
-            prompts = {}
-
+        # 使用新的提示词加载方法
         role_key = role_type or seed.get("role_type") or "配角"
-        
-        # 根据新的文件结构读取提示词
-        if "prompt" in prompts:
-            # 新结构：直接包含 prompt, style 等字段
-            selected_prompt = prompts.get("prompt") or "请补全角色设定，输出 appearance/personality/profile 等字段。"
-            selected_style = prompts.get("style") or "自然简洁、逻辑自洽。"
-        else:
-            # 旧结构：包含在 roles 对象中
-            role_prompts = (prompts.get("roles") or {}).get(role_key) or {}
-            selected_prompt = role_prompts.get("prompt") or "请补全角色设定，输出 appearance/personality/profile 等字段。"
-            selected_style = role_prompts.get("style") or "自然简洁、逻辑自洽。"
+        try:
+            selected_prompt = await self._load_character_prompt(role_key)
+            selected_style = await self._load_styles_prompt()
+            
+            # 处理男主角提示词中的HEROINE_ROLE占位符
+            if role_key == "男主角" and "{HEROINE_ROLE}" in selected_prompt:
+                # 获取女主角信息
+                heroine_info = ""
+                try:
+                    # 这里可以从数据库或缓存中获取女主角信息
+                    # 暂时使用story_info中的信息
+                    if story_info and "女主角" in story_info:
+                        heroine_info = story_info
+                    else:
+                        heroine_info = "暂无女主角设定信息"
+                except Exception as e:
+                    logger.warning(f"获取女主角信息失败: {str(e)}")
+                    heroine_info = "暂无女主角设定信息"
+                
+                # 替换占位符
+                selected_prompt = selected_prompt.replace("{HEROINE_ROLE}", heroine_info)
+                logger.info(f"已替换男主角提示词中的HEROINE_ROLE占位符")
+                
+        except Exception as e:
+            logger.error(f"加载角色提示词失败: {str(e)}")
+            selected_prompt = "请补全角色设定，输出 appearance/personality/profile 等字段。"
+            selected_style = "自然简洁、逻辑自洽。"
         
         # 自动检测并替换提示词中的所有占位符
         additional_context = {}
@@ -141,32 +169,7 @@ class AIService:
         
         selected_prompt = await self._auto_replace_placeholders(selected_prompt, novel_id, additional_context)
 
-        if self.provider == "mock":
-            # 根据角色类型生成更丰富的mock数据
-            role_specific_data = self._get_role_specific_mock_data(role_key, seed)
-            
-            base = {
-                "role_type": role_type or seed.get("role_type") or "配角",
-                "name": seed.get("name") or role_specific_data["name"],
-                "gender": seed.get("gender") or role_specific_data["gender"],
-                "age": seed.get("age") or role_specific_data["age"],
-                "appearance": seed.get("appearance") or role_specific_data["appearance"],
-                "personality": seed.get("personality") or role_specific_data["personality"],
-                "profile": {
-                    "身份职业": (seed.get("profile") or {}).get("身份职业") or role_specific_data["profile"]["身份职业"],
-                    "家庭关系": (seed.get("profile") or {}).get("家庭关系") or role_specific_data["profile"]["家庭关系"],
-                    "早年经历": (seed.get("profile") or {}).get("早年经历") or role_specific_data["profile"]["早年经历"],
-                    "观念信仰": (seed.get("profile") or {}).get("观念信仰") or role_specific_data["profile"]["观念信仰"],
-                    "优点": (seed.get("profile") or {}).get("优点") or role_specific_data["profile"]["优点"],
-                    "缺点": (seed.get("profile") or {}).get("缺点") or role_specific_data["profile"]["缺点"],
-                    "成就": (seed.get("profile") or {}).get("成就") or role_specific_data["profile"]["成就"],
-                    "社会阶层": (seed.get("profile") or {}).get("社会阶层") or role_specific_data["profile"]["社会阶层"],
-                    "习惯嗜好": (seed.get("profile") or {}).get("习惯嗜好") or role_specific_data["profile"]["习惯嗜好"],
-                }
-            }
-            base["_prompt_used"] = {"role": role_key, "prompt": selected_prompt, "style": selected_style, "story_info": story_info or ""}
-            return base
-        elif self.provider == "gemini":
+        if self.provider == "gemini":
             return await self._gemini_generate_character(role_key, selected_prompt, selected_style, seed, story_info)
         elif self.provider == "openai":
             return await self._openai_generate_character(role_key, selected_prompt, selected_style, seed, story_info)
@@ -291,7 +294,7 @@ class AIService:
             if placeholder in all_info:
                 value = str(all_info[placeholder])
                 prompt = prompt.replace(f"{{{placeholder}}}", value)
-                logger.debug(f"替换占位符 {{{placeholder}}} -> {value}")
+                logger.debug(f"替换占位符 {{{placeholder}}} -> {value[:100]}...")
             else:
                 # 检查是否是单个章节概要占位符格式 (CHAPTER_SUMMARY_XXX)
                 if placeholder.startswith("CHAPTER_SUMMARY_"):
@@ -557,65 +560,29 @@ class AIService:
                                input_summary: str, style: str = "default", 
                                max_tokens: int = 1000) -> AsyncGenerator[str, None]:
         """流式扩写文本"""
-        if self.provider == "mock":
-            async for chunk in self._mock_expand_stream(input_summary, max_tokens):
+        # 自动替换提示词中的占位符
+        additional_context = {
+            "INPUT_SUMMARY": input_summary,
+            "ORIGINAL_TEXT": input_summary,
+            "ORIGINAL_PARAGRAPH": input_summary,
+            "STYLE": style,
+            "OTHER_INPUT": "",
+            "MAX_TOKENS": str(max_tokens)
+        }
+            
+        # 如果是灵感生成，跳过占位符替换
+        if novel_id != "inspiration":
+            prompt_template = await self._auto_replace_placeholders(prompt_template, novel_id, additional_context)
+        
+        if self.provider == "openai":
+            async for chunk in self._openai_expand_stream(prompt_template, input_summary, style, max_tokens):
+                yield chunk
+        elif self.provider == "gemini":
+            async for chunk in self._gemini_expand_stream(prompt_template, input_summary, style, max_tokens):
                 yield chunk
         else:
-            # 自动替换提示词中的占位符
-            additional_context = {
-                "INPUT_SUMMARY": input_summary,
-                "ORIGINAL_TEXT": input_summary,
-                "ORIGINAL_PARAGRAPH": input_summary,
-                "STYLE": style,
-                "OTHER_INPUT": "",
-                "MAX_TOKENS": str(max_tokens)
-            }
-            
-            # 如果是灵感生成，跳过占位符替换
-            if novel_id != "inspiration":
-                prompt_template = await self._auto_replace_placeholders(prompt_template, novel_id, additional_context)
-            
-            if self.provider == "openai":
-                async for chunk in self._openai_expand_stream(prompt_template, input_summary, style, max_tokens):
-                    yield chunk
-            elif self.provider == "gemini":
-                async for chunk in self._gemini_expand_stream(prompt_template, input_summary, style, max_tokens):
-                    yield chunk
-            else:
-                yield "暂不支持该AI提供者"
+            yield "请配置有效的AI提供者（openai或gemini）"
     
-    # Mock 实现
-    async def _mock_expand(self, input_summary: str, max_tokens: int) -> str:
-        await asyncio.sleep(1)  # 模拟API延迟
-        return f"""根据您提供的内容"{input_summary[:50]}..."，我为您扩写如下：
-
-这是一个充满想象力的故事开端。在这个神秘的世界中，主人公即将踏上一段不平凡的旅程。
-
-随着晨曦的第一缕阳光透过云层洒向大地，空气中弥漫着淡淡的薄雾。远处传来鸟儿清脆的啁啾声，仿佛在为即将到来的冒险奏响序曲。
-
-主人公深深地吸了一口清新的空气，感受着这个世界的独特气息。心中既有对未知的恐惧，也有对探索的渴望...
-
-（这是Mock AI的扩写结果，实际使用时请配置真实的AI服务）"""
-    
-    async def _mock_polish(self, text: str) -> str:
-        await asyncio.sleep(0.5)
-        return f"【润色版本】{text}\n\n（已进行语言优化、错别字修正和表达改进）"
-    
-    async def _mock_summarize(self, text: str, max_sentences: int) -> str:
-        await asyncio.sleep(0.5)
-        return f"这段文本主要描述了关键情节和人物发展。内容涉及主要冲突和故事转折。总体来说，这是故事发展的重要节点。"
-    
-    async def _mock_expand_stream(self, input_summary: str, max_tokens: int) -> AsyncGenerator[str, None]:
-        words = [
-            "这是一个", "充满想象力的", "故事。", "在这个", "神秘的", "世界中，", 
-            "主人公", "即将踏上", "一段", "不平凡的", "旅程。\n\n",
-            "随着", "晨曦的", "第一缕", "阳光", "透过云层", "洒向大地，",
-            "空气中", "弥漫着", "淡淡的", "薄雾。"
-        ]
-        
-        for word in words:
-            await asyncio.sleep(0.1)  # 模拟流式输出
-            yield word
     
     # OpenAI 实现
     async def _openai_expand(self, prompt_template: str, input_summary: str, 
@@ -635,12 +602,8 @@ class AIService:
                         "model": "gpt-3.5-turbo",
                         "messages": [
                             {
-                                "role": "system",
-                                "content": f"你是一位专业的小说写作助手。请根据用户提供的内容进行创意扩写，风格为{style}。"
-                            },
-                            {
                                 "role": "user", 
-                                "content": f"请根据以下内容进行扩写：{input_summary}\n\n要求：{prompt_template}"
+                                "content": prompt_template
                             }
                         ],
                         "max_tokens": max_tokens,
@@ -663,6 +626,11 @@ class AIService:
         if not self.openai_api_key:
             return "请配置OpenAI API Key"
         
+        # 加载润色提示词
+        prompt_template = await self._load_polish_prompt(style)
+        full_prompt = prompt_template.replace("{ORIGINAL_TEXT}", text)
+        full_prompt = full_prompt.replace("{STYLE}", style)
+        
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.post(
@@ -675,12 +643,8 @@ class AIService:
                         "model": "gpt-3.5-turbo",
                         "messages": [
                             {
-                                "role": "system",
-                                "content": f"你是一位专业的文本润色助手。请对用户的文本进行润色，{'保持原意不变' if preserve_content else '可以适当调整表达'}，风格为{style}。"
-                            },
-                            {
                                 "role": "user",
-                                "content": f"请润色以下文本：\n{text}"
+                                "content": full_prompt
                             }
                         ],
                         "max_tokens": len(text) + 500,
@@ -703,6 +667,11 @@ class AIService:
         if not self.openai_api_key:
             return "请配置OpenAI API Key"
         
+        # 加载摘要提示词
+        prompt_template = await self._load_summary_prompt("chapter")
+        full_prompt = prompt_template.replace("{TEXT}", text)
+        full_prompt = full_prompt.replace("{MAX_SENTENCES}", str(max_sentences))
+        
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.post(
@@ -715,12 +684,8 @@ class AIService:
                         "model": "gpt-3.5-turbo",
                         "messages": [
                             {
-                                "role": "system",
-                                "content": f"你是一位专业的文本总结助手。请用{max_sentences}句话以内总结用户提供的文本内容。"
-                            },
-                            {
                                 "role": "user",
-                                "content": f"请总结以下文本：\n{text}"
+                                "content": full_prompt
                             }
                         ],
                         "max_tokens": max_sentences * 50,
@@ -758,12 +723,8 @@ class AIService:
                         "model": "gpt-3.5-turbo",
                         "messages": [
                             {
-                                "role": "system",
-                                "content": f"你是一位专业的小说写作助手。请根据用户提供的内容进行创意扩写，风格为{style}。"
-                            },
-                            {
                                 "role": "user",
-                                "content": f"请根据以下内容进行扩写：{input_summary}\n\n要求：{prompt_template}"
+                                "content": prompt_template
                             }
                         ],
                         "max_tokens": max_tokens,
@@ -839,28 +800,25 @@ class AIService:
             return f"AI服务暂时不可用: {str(e)}"
 
     async def _gemini_expand(self, prompt_template: str, input_summary: str, style: str, max_tokens: int) -> str:
-        prompt = (
-            f"你是一位专业的小说写作助手。请根据用户提供的内容进行创意扩写，风格为{style}。\n\n"
-            f"要求：{prompt_template}\n\n"
-            f"待扩写内容：\n{input_summary}"
-        )
-        result = await self._gemini_generate(prompt, max_tokens)
+        result = await self._gemini_generate(prompt_template, max_tokens)
         return result or ""
 
     async def _gemini_polish(self, text: str, preserve_content: bool, style: str) -> str:
-        rules = "保持原意不变" if preserve_content else "可对表达进行适度调整"
-        prompt = (
-            f"你是一位专业的文本润色助手，请对以下文本进行润色，{rules}，风格为{style}。\n\n"
-            f"文本：\n{text}"
-        )
-        result = await self._gemini_generate(prompt, max_tokens=len(text) + 500)
+        # 加载润色提示词
+        prompt_template = await self._load_polish_prompt(style)
+        full_prompt = prompt_template.replace("{ORIGINAL_TEXT}", text)
+        full_prompt = full_prompt.replace("{STYLE}", style)
+        
+        result = await self._gemini_generate(full_prompt, max_tokens=len(text) + 500)
         return result or ""
 
     async def _gemini_summarize(self, text: str, max_sentences: int) -> str:
-        prompt = (
-            f"你是一位专业的文本总结助手。请用不超过{max_sentences}句话总结以下文本的要点：\n\n{text}"
-        )
-        result = await self._gemini_generate(prompt, max_tokens=max_sentences * 60)
+        # 加载摘要提示词
+        prompt_template = await self._load_summary_prompt("chapter")
+        full_prompt = prompt_template.replace("{TEXT}", text)
+        full_prompt = full_prompt.replace("{MAX_SENTENCES}", str(max_sentences))
+        
+        result = await self._gemini_generate(full_prompt, max_tokens=max_sentences * 60)
         return result or ""
 
     async def _gemini_expand_stream(self, prompt_template: str, input_summary: str, style: str, max_tokens: int) -> AsyncGenerator[str, None]:
@@ -876,11 +834,7 @@ class AIService:
                         "role": "user",
                         "parts": [
                             {
-                                "text": (
-                                    f"你是一位专业的小说写作助手。请根据用户提供的内容进行创意扩写，风格为{style}。\n\n"
-                                    f"要求：{prompt_template}\n\n"
-                                    f"待扩写内容：\n{input_summary}"
-                                )
+                                "text": prompt_template
                             }
                         ]
                     }
@@ -1112,10 +1066,6 @@ class AIService:
                         "model": "gpt-3.5-turbo",
                         "messages": [
                             {
-                                "role": "system",
-                                "content": f"你是一位专业的小说写作助手，擅长根据小说的整体设定和风格进行扩写。请保持与小说世界观、角色设定和写作风格的一致性。"
-                            },
-                            {
                                 "role": "user",
                                 "content": full_prompt
                             }
@@ -1172,7 +1122,7 @@ class AIService:
         elif role_key == "男主角":
             return {
                 "name": seed.get("name") or "楚云飞",
-                "gender": seed.get("gender") or "男",
+                "gender": self._normalize_gender(seed.get("gender")) or "male",
                 "age": seed.get("age") or 22,
                 "appearance": seed.get("appearance") or "身材魁梧，剑眉星目，气质不凡，身着一袭青衫，手持一柄长剑。",
                 "personality": seed.get("personality") or "豪放不羁，重情重义，行事果断，但有时过于冲动，缺乏深思熟虑。",
@@ -1191,7 +1141,7 @@ class AIService:
         elif role_key == "配角":
             return {
                 "name": seed.get("name") or "张三",
-                "gender": seed.get("gender") or "男",
+                "gender": self._normalize_gender(seed.get("gender")) or "male",
                 "age": seed.get("age") or 25,
                 "appearance": seed.get("appearance") or "身材中等，相貌普通，气质温和，略显木讷。",
                 "personality": seed.get("personality") or "性格随和，乐于助人，但有时过于优柔寡断。",
@@ -1229,7 +1179,7 @@ class AIService:
         elif role_key == "男二":
             return {
                 "name": seed.get("name") or "萧逸风",
-                "gender": seed.get("gender") or "男",
+                "gender": self._normalize_gender(seed.get("gender")) or "male",
                 "age": seed.get("age") or 24,
                 "appearance": seed.get("appearance") or "风度翩翩，相貌俊美，举止优雅，总是面带微笑。",
                 "personality": seed.get("personality") or "温和儒雅，善解人意，但有时过于完美，缺乏真实感。",
@@ -1268,46 +1218,20 @@ class AIService:
     async def _gemini_generate_character(self, role_key: str, prompt: str, style: str, seed: dict, story_info: str) -> dict:
         """使用Gemini API生成角色设定"""
         if not self.gemini_api_key:
-            return self._get_role_specific_mock_data(role_key, seed)
+            return {
+                "error": "Gemini API密钥未配置",
+                "role_type": role_key,
+                "name": "配置错误",
+                "gender": None,
+                "age": None,
+                "appearance": "API密钥未配置",
+                "personality": "API密钥未配置",
+                "profile": {},
+                "_prompt_used": {"role": role_key, "prompt": prompt, "style": style, "story_info": story_info or ""}
+            }
         
         try:
-            # 构建角色生成的完整提示词
-            system_prompt = f"""你是一位专业的小说角色设计师。请根据用户要求生成完整的角色设定。
-
-要求：
-1. 必须输出JSON格式，包含以下字段：
-- name: 角色姓名
-- gender: 性别（男/女）
-- age: 年龄（数字）
-- appearance: 外貌描述
-- personality: 性格描述
-- profile: 包含以下子字段的对象
-  - 身份职业: 角色的职业身份
-  - 家庭关系: 家庭背景
-  - 早年经历: 成长经历
-  - 观念信仰: 价值观念
-  - 优点: 性格优点
-  - 缺点: 性格缺点
-  - 成就: 主要成就
-  - 社会阶层: 社会地位
-  - 习惯嗜好: 个人爱好
-
-2. 风格要求：{style}
-3. 角色类型：{role_key}
-4. 故事背景：{story_info or "现代背景"}
-
-请直接输出JSON格式的角色设定，不要有其他文字。"""
-
-            user_prompt = f"""请为{role_key}生成完整的角色设定。
-
-已有信息：
-{json.dumps(seed, ensure_ascii=False, indent=2) if seed else "无"}
-
-参考提示词片段：
-{prompt[:500]}...
-
-请生成完整的JSON格式角色设定。"""
-
+            # 直接使用character.py中的提示词
             async with httpx.AsyncClient() as client:
                 response = await client.post(
                     f"{self.gemini_base_url}/v1beta/models/gemini-2.0-flash:generateContent",
@@ -1319,13 +1243,13 @@ class AIService:
                         "contents": [
                             {
                                 "parts": [
-                                    {"text": system_prompt + "\n\n" + user_prompt}
+                                    {"text": prompt}
                                 ]
                             }
                         ],
                         "generationConfig": {
                             "temperature": 0.8,
-                            "maxOutputTokens": 2048
+                            "maxOutputTokens": 4096
                         }
                     },
                     timeout=30.0
@@ -1337,26 +1261,37 @@ class AIService:
                     
                     # 尝试解析JSON
                     try:
-                        # 提取JSON部分
+                        logger.info(f"Gemini生成文本 (角色: {role_key}): {generated_text[:500]}...")
+                        
+                        # 提取JSON部分 - 支持```json标记
                         json_start = generated_text.find('{')
+                        if json_start == -1:
+                            # 尝试查找```json标记
+                            json_marker = generated_text.find('```json')
+                            if json_marker != -1:
+                                json_start = generated_text.find('{', json_marker)
+                        
                         json_end = generated_text.rfind('}') + 1
                         if json_start >= 0 and json_end > json_start:
                             json_text = generated_text[json_start:json_end]
+                            logger.info(f"提取的JSON文本: {json_text}")
                             ai_data = json.loads(json_text)
                             
                             # 确保数据格式正确
                             return {
-                                "role_type": role_key,
+                                "role_type": role_key,  # 确保角色类型正确传递
                                 "name": ai_data.get("name") or seed.get("name") or "AI生成角色",
-                                "gender": ai_data.get("gender") or seed.get("gender"),
+                                "gender": self._normalize_gender(ai_data.get("gender") or seed.get("gender")),
                                 "age": ai_data.get("age") or seed.get("age"),
                                 "appearance": ai_data.get("appearance") or seed.get("appearance") or "AI生成外貌",
                                 "personality": ai_data.get("personality") or seed.get("personality") or "AI生成性格",
                                 "profile": ai_data.get("profile") or seed.get("profile") or {},
                                 "_prompt_used": {"role": role_key, "prompt": prompt, "style": style, "story_info": story_info or ""}
                             }
-                    except json.JSONDecodeError:
-                        logger.warning(f"Gemini返回的文本无法解析为JSON: {generated_text}")
+                    except json.JSONDecodeError as e:
+                        logger.warning(f"Gemini返回的文本无法解析为JSON (角色: {role_key}): {e}")
+                        logger.warning(f"原始文本: {generated_text}")
+                        logger.warning(f"提取的JSON文本: {json_text if 'json_text' in locals() else 'N/A'}")
                         
                 else:
                     logger.error(f"Gemini API调用失败: {response.status_code} {response.text}")
@@ -1364,52 +1299,36 @@ class AIService:
         except Exception as e:
             logger.error(f"Gemini角色生成失败: {str(e)}")
         
-        # 如果AI生成失败，回退到mock数据
-        return self._get_role_specific_mock_data(role_key, seed)
+        # 如果AI生成失败，返回失败信息
+        return {
+            "error": "AI角色生成失败",
+            "role_type": role_key,
+            "name": "生成失败",
+            "gender": None,
+            "age": None,
+            "appearance": "生成失败",
+            "personality": "生成失败",
+            "profile": {},
+            "_prompt_used": {"role": role_key, "prompt": prompt, "style": style, "story_info": story_info or ""}
+        }
 
     async def _openai_generate_character(self, role_key: str, prompt: str, style: str, seed: dict, story_info: str) -> dict:
         """使用OpenAI API生成角色设定"""
         if not self.openai_api_key:
-            return self._get_role_specific_mock_data(role_key, seed)
+            return {
+                "error": "OpenAI API密钥未配置",
+                "role_type": role_key,
+                "name": "配置错误",
+                "gender": None,
+                "age": None,
+                "appearance": "API密钥未配置",
+                "personality": "API密钥未配置",
+                "profile": {},
+                "_prompt_used": {"role": role_key, "prompt": prompt, "style": style, "story_info": story_info or ""}
+            }
         
         try:
-            # 构建角色生成的完整提示词
-            system_prompt = f"""你是一位专业的小说角色设计师。请根据用户要求生成完整的角色设定。
-
-要求：
-1. 必须输出JSON格式，包含以下字段：
-- name: 角色姓名
-- gender: 性别（男/女）
-- age: 年龄（数字）
-- appearance: 外貌描述
-- personality: 性格描述
-- profile: 包含以下子字段的对象
-  - 身份职业: 角色的职业身份
-  - 家庭关系: 家庭背景
-  - 早年经历: 成长经历
-  - 观念信仰: 价值观念
-  - 优点: 性格优点
-  - 缺点: 性格缺点
-  - 成就: 主要成就
-  - 社会阶层: 社会地位
-  - 习惯嗜好: 个人爱好
-
-2. 风格要求：{style}
-3. 角色类型：{role_key}
-4. 故事背景：{story_info or "现代背景"}
-
-请直接输出JSON格式的角色设定，不要有其他文字。"""
-
-            user_prompt = f"""请为{role_key}生成完整的角色设定。
-
-已有信息：
-{json.dumps(seed, ensure_ascii=False, indent=2) if seed else "无"}
-
-参考提示词片段：
-{prompt[:500]}...
-
-请生成完整的JSON格式角色设定。"""
-
+            # 直接使用character.py中的提示词
             async with httpx.AsyncClient() as client:
                 response = await client.post(
                     f"{self.openai_base_url}/chat/completions",
@@ -1420,8 +1339,7 @@ class AIService:
                     json={
                         "model": "gpt-3.5-turbo",
                         "messages": [
-                            {"role": "system", "content": system_prompt},
-                            {"role": "user", "content": user_prompt}
+                            {"role": "user", "content": prompt}
                         ],
                         "max_tokens": 2048,
                         "temperature": 0.8
@@ -1435,8 +1353,14 @@ class AIService:
                     
                     # 尝试解析JSON
                     try:
-                        # 提取JSON部分
+                        # 提取JSON部分 - 支持```json标记
                         json_start = generated_text.find('{')
+                        if json_start == -1:
+                            # 尝试查找```json标记
+                            json_marker = generated_text.find('```json')
+                            if json_marker != -1:
+                                json_start = generated_text.find('{', json_marker)
+                        
                         json_end = generated_text.rfind('}') + 1
                         if json_start >= 0 and json_end > json_start:
                             json_text = generated_text[json_start:json_end]
@@ -1444,9 +1368,9 @@ class AIService:
                             
                             # 确保数据格式正确
                             return {
-                                "role_type": role_key,
+                                "role_type": role_key,  # 确保角色类型正确传递
                                 "name": ai_data.get("name") or seed.get("name") or "AI生成角色",
-                                "gender": ai_data.get("gender") or seed.get("gender"),
+                                "gender": self._normalize_gender(ai_data.get("gender") or seed.get("gender")),
                                 "age": ai_data.get("age") or seed.get("age"),
                                 "appearance": ai_data.get("appearance") or seed.get("appearance") or "AI生成外貌",
                                 "personality": ai_data.get("personality") or seed.get("personality") or "AI生成性格",
@@ -1462,8 +1386,235 @@ class AIService:
         except Exception as e:
             logger.error(f"OpenAI角色生成失败: {str(e)}")
         
-        # 如果AI生成失败，回退到mock数据
-        return self._get_role_specific_mock_data(role_key, seed)
+        # 如果AI生成失败，返回失败信息
+        return {
+            "error": "AI角色生成失败",
+            "role_type": role_key,
+            "name": "生成失败",
+            "gender": None,
+            "age": None,
+            "appearance": "生成失败",
+            "personality": "生成失败",
+            "profile": {},
+            "_prompt_used": {"role": role_key, "prompt": prompt, "style": style, "story_info": story_info or ""}
+        }
+
+    async def _load_expand_prompt(self, style: str = "default") -> str:
+        """加载扩写提示词"""
+        try:
+            import sys
+            novel_repo_path = str(file_service.novel_repo_path)
+            if novel_repo_path not in sys.path:
+                sys.path.insert(0, novel_repo_path)
+            
+            from ai_prompts.prompts import get_expand_prompt
+            
+            # 根据风格选择提示词，默认为sentence
+            prompt_type = "sentence" if style == "default" else "sentence"
+            return get_expand_prompt(prompt_type)
+        except Exception as e:
+            logger.error(f"加载扩写提示词失败: {str(e)}")
+            raise Exception(f"加载扩写提示词失败: {str(e)}")
+    
+    async def _load_polish_prompt(self, style: str = "default") -> str:
+        """加载润色提示词"""
+        try:
+            import sys
+            novel_repo_path = str(file_service.novel_repo_path)
+            if novel_repo_path not in sys.path:
+                sys.path.insert(0, novel_repo_path)
+            
+            from ai_prompts.prompts import get_polish_prompt
+            
+            # 根据风格选择提示词，默认为sentence
+            prompt_type = "sentence" if style == "default" else "sentence"
+            return get_polish_prompt(prompt_type)
+        except Exception as e:
+            logger.error(f"加载润色提示词失败: {str(e)}")
+            raise Exception(f"加载润色提示词失败: {str(e)}")
+    
+    async def _load_summary_prompt(self, summary_type: str = "chapter") -> str:
+        """加载摘要提示词"""
+        try:
+            import sys
+            novel_repo_path = str(file_service.novel_repo_path)
+            if novel_repo_path not in sys.path:
+                sys.path.insert(0, novel_repo_path)
+            
+            from ai_prompts.prompts import get_summary_prompt
+            return get_summary_prompt(summary_type)
+        except Exception as e:
+            logger.error(f"加载摘要提示词失败: {str(e)}")
+            raise Exception(f"加载摘要提示词失败: {str(e)}")
+    
+    async def _load_world_prompt(self, prompt_type: str = "random") -> str:
+        """加载世界观提示词"""
+        try:
+            import sys
+            novel_repo_path = str(file_service.novel_repo_path)
+            if novel_repo_path not in sys.path:
+                sys.path.insert(0, novel_repo_path)
+            
+            from ai_prompts.prompts import get_world_prompt
+            return get_world_prompt(prompt_type)
+        except Exception as e:
+            logger.error(f"加载世界观提示词失败: {str(e)}")
+            raise Exception(f"加载世界观提示词失败: {str(e)}")
+    
+    async def _load_inspiration_prompt(self, prompt_type: str = "main_story") -> str:
+        """加载灵感提示词"""
+        try:
+            import sys
+            novel_repo_path = str(file_service.novel_repo_path)
+            if novel_repo_path not in sys.path:
+                sys.path.insert(0, novel_repo_path)
+            
+            from ai_prompts.prompts import get_inspiration_prompt
+            return get_inspiration_prompt(prompt_type)
+        except Exception as e:
+            logger.error(f"加载灵感提示词失败: {str(e)}")
+            raise Exception(f"加载灵感提示词失败: {str(e)}")
+    
+    def _normalize_gender(self, gender: str | None) -> str | None:
+        """标准化性别字段，将中文转换为英文"""
+        if not gender:
+            return None
+        gender_lower = gender.lower().strip()
+        if gender_lower in ['男', 'male', 'm']:
+            return 'male'
+        elif gender_lower in ['女', 'female', 'f']:
+            return 'female'
+        return gender
+
+    async def _load_character_prompt(self, character_type: str) -> str:
+        """加载角色提示词"""
+        try:
+            import sys
+            novel_repo_path = str(file_service.novel_repo_path)
+            if novel_repo_path not in sys.path:
+                sys.path.insert(0, novel_repo_path)
+            
+            from ai_prompts.prompts import get_character_prompt
+            return get_character_prompt(character_type)
+        except Exception as e:
+            logger.error(f"加载角色提示词失败: {str(e)}")
+            raise Exception(f"加载角色提示词失败: {str(e)}")
+    
+    async def _load_outline_prompt(self, outline_type: str) -> str:
+        """加载大纲提示词"""
+        try:
+            import sys
+            novel_repo_path = str(file_service.novel_repo_path)
+            if novel_repo_path not in sys.path:
+                sys.path.insert(0, novel_repo_path)
+            
+            from ai_prompts.prompts import get_outline_prompt
+            return get_outline_prompt(outline_type)
+        except Exception as e:
+            logger.error(f"加载大纲提示词失败: {str(e)}")
+            raise Exception(f"加载大纲提示词失败: {str(e)}")
+    
+    async def _load_styles_prompt(self) -> str:
+        """加载风格提示词"""
+        try:
+            import sys
+            novel_repo_path = str(file_service.novel_repo_path)
+            if novel_repo_path not in sys.path:
+                sys.path.insert(0, novel_repo_path)
+            
+            from ai_prompts.prompts import get_styles_prompt
+            return get_styles_prompt("current")
+        except Exception as e:
+            logger.error(f"加载风格提示词失败: {str(e)}")
+            raise Exception(f"加载风格提示词失败: {str(e)}")
+    
+    async def _openai_polish_enhanced(self, text: str, prompt_template: str, preserve_content: bool, style: str) -> str:
+        """使用OpenAI进行增强版润色"""
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{self.openai_base_url}/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {self.openai_api_key}",
+                        "Content-Type": "application/json"
+                    },
+                    json={
+                        "model": "gpt-3.5-turbo",
+                        "messages": [
+                            {"role": "user", "content": prompt_template}
+                        ],
+                        "max_tokens": len(text) + 500,
+                        "temperature": 0.7
+                    },
+                    timeout=30.0
+                )
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    return result["choices"][0]["message"]["content"]
+                else:
+                    logger.error(f"OpenAI润色API调用失败: {response.status_code} {response.text}")
+                    return text
+        except Exception as e:
+            logger.error(f"OpenAI润色失败: {str(e)}")
+            return text
+    
+    async def _gemini_polish_enhanced(self, text: str, prompt_template: str, preserve_content: bool, style: str) -> str:
+        """使用Gemini进行增强版润色"""
+        try:
+            result = await self._gemini_generate(prompt_template, len(text) + 500)
+            return result or text
+        except Exception as e:
+            logger.error(f"Gemini润色失败: {str(e)}")
+            return text
+    
+    async def _openai_summarize_enhanced(self, text: str, prompt_template: str, max_sentences: int) -> str:
+        """使用OpenAI进行增强版摘要"""
+        try:
+            # 替换提示词中的占位符
+            full_prompt = prompt_template.replace("{TEXT}", text)
+            full_prompt = full_prompt.replace("{MAX_SENTENCES}", str(max_sentences))
+            
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{self.openai_base_url}/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {self.openai_api_key}",
+                        "Content-Type": "application/json"
+                    },
+                    json={
+                        "model": "gpt-3.5-turbo",
+                        "messages": [
+                            {"role": "user", "content": full_prompt}
+                        ],
+                        "max_tokens": max_sentences * 60,
+                        "temperature": 0.3
+                    },
+                    timeout=30.0
+                )
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    return result["choices"][0]["message"]["content"]
+                else:
+                    logger.error(f"OpenAI摘要API调用失败: {response.status_code} {response.text}")
+                    return text[:200] + "..."
+        except Exception as e:
+            logger.error(f"OpenAI摘要失败: {str(e)}")
+            return text[:200] + "..."
+    
+    async def _gemini_summarize_enhanced(self, text: str, prompt_template: str, max_sentences: int) -> str:
+        """使用Gemini进行增强版摘要"""
+        try:
+            # 替换提示词中的占位符
+            full_prompt = prompt_template.replace("{TEXT}", text)
+            full_prompt = full_prompt.replace("{MAX_SENTENCES}", str(max_sentences))
+            
+            result = await self._gemini_generate(full_prompt, max_sentences * 60)
+            return result or text[:200] + "..."
+        except Exception as e:
+            logger.error(f"Gemini摘要失败: {str(e)}")
+            return text[:200] + "..."
 
 # 创建AI服务实例
 ai_service = AIService() 

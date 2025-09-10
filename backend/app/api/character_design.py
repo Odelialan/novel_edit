@@ -86,31 +86,43 @@ async def design_hero_character(request: CharacterDesignRequest):
     设计男主角角色
     """
     try:
-        # 读取男主角提示词模板
-        prompt_file = "novel_repo/ai_prompts/character/男主角.json"
-        if not os.path.exists(prompt_file):
-            raise HTTPException(status_code=404, detail="男主角提示词模板文件不存在")
+        # 使用Python模块读取提示词
+        import sys
+        from app.services.file_service import file_service
         
-        with open(prompt_file, 'r', encoding='utf-8') as f:
-            prompt_data = json.load(f)
+        novel_repo_path = str(file_service.novel_repo_path)
+        if novel_repo_path not in sys.path:
+            sys.path.insert(0, novel_repo_path)
         
-        # 替换模板中的参数
-        prompt = prompt_data["prompt"]
-        prompt = prompt.replace("{novel_type}", request.novel_type)
-        prompt = prompt.replace("{outline}", request.outline)
-        prompt = prompt.replace("{plot}", request.plot)
-        prompt = prompt.replace("{character_design}", request.character_design)
-        prompt = prompt.replace("{heroine_profile}", request.heroine_profile or "")
+        from ai_prompts.prompts import get_character_prompt
+        prompt = get_character_prompt("男主角")
+        
+        # 使用format方法替换占位符
+        try:
+            formatted_prompt = prompt.format(
+                novel_type=request.novel_type,
+                outline=request.outline,
+                plot=request.plot,
+                character_design=request.character_design,
+                heroine_profile=request.heroine_profile or ""
+            )
+        except KeyError as e:
+            # 如果占位符不存在，使用replace方法
+            formatted_prompt = prompt.replace("{NOVEL_TYPE}", request.novel_type)
+            formatted_prompt = formatted_prompt.replace("{OUTLINE_CONTENT}", request.outline)
+            formatted_prompt = formatted_prompt.replace("{PLOT_POINTS}", request.plot)
+            formatted_prompt = formatted_prompt.replace("{CHARACTER_DESIGN}", request.character_design)
+            formatted_prompt = formatted_prompt.replace("{HEROINE_ROLE}", request.heroine_profile or "")
         
         # 返回处理后的提示词
         return CharacterDesignResponse(
             success=True,
             message="男主角角色设计提示词生成成功",
             data={
-                "prompt": prompt,
-                "style": prompt_data.get("style", ""),
-                "schema_hint": prompt_data.get("schema_hint", ""),
-                "parameters": prompt_data.get("parameters", {})
+                "prompt": formatted_prompt,
+                "style": "",
+                "schema_hint": "",
+                "parameters": {}
             }
         )
         
@@ -123,30 +135,43 @@ async def design_heroine_character(request: CharacterDesignRequest):
     设计女主角角色
     """
     try:
-        # 读取女主角提示词模板
-        prompt_file = "novel_repo/ai_prompts/character/女主角.json"
-        if not os.path.exists(prompt_file):
-            raise HTTPException(status_code=404, detail="女主角提示词模板文件不存在")
+        # 使用Python模块读取提示词
+        import sys
+        from app.services.file_service import file_service
         
-        with open(prompt_file, 'r', encoding='utf-8') as f:
-            prompt_data = json.load(f)
+        novel_repo_path = str(file_service.novel_repo_path)
+        if novel_repo_path not in sys.path:
+            sys.path.insert(0, novel_repo_path)
         
-        # 替换模板中的参数
-        prompt = prompt_data["prompt"]
-        prompt = prompt.replace("{novel_type}", request.novel_type)
-        prompt = prompt.replace("{outline}", request.outline)
-        prompt = prompt.replace("{plot}", request.plot)
-        prompt = prompt.replace("{character_design}", request.character_design)
+        from ai_prompts.prompts import get_character_prompt
+        prompt = get_character_prompt("女主角")
+        
+        # 使用format方法替换占位符
+        try:
+            formatted_prompt = prompt.format(
+                novel_type=request.novel_type,
+                outline=request.outline,
+                plot=request.plot,
+                character_design=request.character_design,
+                hero_profile=request.hero_profile or ""
+            )
+        except KeyError as e:
+            # 如果占位符不存在，使用replace方法
+            formatted_prompt = prompt.replace("{NOVEL_TYPE}", request.novel_type)
+            formatted_prompt = formatted_prompt.replace("{OUTLINE_CONTENT}", request.outline)
+            formatted_prompt = formatted_prompt.replace("{PLOT_POINTS}", request.plot)
+            formatted_prompt = formatted_prompt.replace("{CHARACTER_DESIGN}", request.character_design)
+            formatted_prompt = formatted_prompt.replace("{HERO_ROLE}", request.hero_profile or "")
         
         # 返回处理后的提示词
         return CharacterDesignResponse(
             success=True,
             message="女主角角色设计提示词生成成功",
             data={
-                "prompt": prompt,
-                "style": prompt_data.get("style", ""),
-                "schema_hint": prompt_data.get("schema_hint", ""),
-                "parameters": prompt_data.get("parameters", {})
+                "prompt": formatted_prompt,
+                "style": "",
+                "schema_hint": "",
+                "parameters": {}
             }
         )
         
@@ -161,27 +186,37 @@ async def get_character_templates():
     try:
         templates = {}
         
+        # 使用Python模块读取提示词
+        import sys
+        from app.services.file_service import file_service
+        
+        novel_repo_path = str(file_service.novel_repo_path)
+        if novel_repo_path not in sys.path:
+            sys.path.insert(0, novel_repo_path)
+        
+        from ai_prompts.prompts import get_character_prompt
+        
         # 读取男主角模板
-        hero_file = "novel_repo/ai_prompts/character/男主角.json"
-        if os.path.exists(hero_file):
-            with open(hero_file, 'r', encoding='utf-8') as f:
-                hero_data = json.load(f)
-                templates["hero"] = {
-                    "parameters": hero_data.get("parameters", {}),
-                    "style": hero_data.get("style", ""),
-                    "schema_hint": hero_data.get("schema_hint", "")
-                }
+        try:
+            hero_prompt = get_character_prompt("男主角")
+            templates["hero"] = {
+                "parameters": {},
+                "style": "",
+                "schema_hint": hero_prompt
+            }
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"获取男主角模板失败: {str(e)}")
         
         # 读取女主角模板
-        heroine_file = "novel_repo/ai_prompts/character/女主角.json"
-        if os.path.exists(heroine_file):
-            with open(heroine_file, 'r', encoding='utf-8') as f:
-                heroine_data = json.load(f)
-                templates["heroine"] = {
-                    "parameters": heroine_data.get("parameters", {}),
-                    "style": heroine_data.get("style", ""),
-                    "schema_hint": heroine_data.get("schema_hint", "")
-                }
+        try:
+            heroine_prompt = get_character_prompt("女主角")
+            templates["heroine"] = {
+                "parameters": {},
+                "style": "",
+                "schema_hint": heroine_prompt
+            }
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"获取女主角模板失败: {str(e)}")
         
         return CharacterDesignResponse(
             success=True,

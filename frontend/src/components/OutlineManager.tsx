@@ -237,6 +237,7 @@ export default function OutlineManager({ novelId }: OutlineManagerProps) {
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [isTemplateModalVisible, setIsTemplateModalVisible] = useState(false)
   const [selectedTemplate, setSelectedTemplate] = useState<string>('')
+  const [draggingId, setDraggingId] = useState<string | null>(null)
 
 
   const [showAIPanel, setShowAIPanel] = useState(false)
@@ -538,14 +539,36 @@ export default function OutlineManager({ novelId }: OutlineManagerProps) {
     setIsRefreshing(false)
   }
 
-  const handleDragEnd = (result: any) => {
-    if (!result.destination) return
+  // 拖拽排序相关函数
+  const onDragStart = (outlineId: string) => {
+    setDraggingId(outlineId)
+  }
+
+  const onDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+  }
+
+  const onDrop = (targetOutlineId: string) => {
+    if (!draggingId || draggingId === targetOutlineId) {
+      setDraggingId(null)
+      return
+    }
+
+    const currentOutlines = [...outlines]
+    const fromIndex = currentOutlines.findIndex(o => o.id === draggingId)
+    const toIndex = currentOutlines.findIndex(o => o.id === targetOutlineId)
     
-    const items = Array.from(outlines)
-    const [reorderedItem] = items.splice(result.source.index, 1)
-    items.splice(result.destination.index, 0, reorderedItem)
+    if (fromIndex < 0 || toIndex < 0) {
+      setDraggingId(null)
+      return
+    }
+
+    // 重新排列大纲
+    const [movedOutline] = currentOutlines.splice(fromIndex, 1)
+    currentOutlines.splice(toIndex, 0, movedOutline)
     
-    setOutlines(items)
+    setOutlines(currentOutlines)
+    setDraggingId(null)
   }
 
   const handleDeleteOutline = async (outlinePath: string) => {
@@ -622,10 +645,22 @@ export default function OutlineManager({ novelId }: OutlineManagerProps) {
                 dataSource={outlines}
                 renderItem={(item, index) => (
                   <List.Item
-                    className={`cursor-pointer ${selected?.path === item.path ? 'bg-blue-50' : ''}`}
+                    className={`cursor-pointer transition-all ${
+                      selected?.path === item.path ? 'bg-blue-50' : ''
+                    } ${
+                      draggingId === item.id ? 'opacity-50 bg-gray-100' : ''
+                    }`}
                     onClick={() => handleSelect(item)}
+                    draggable
+                    onDragStart={() => onDragStart(item.id)}
+                    onDragOver={onDragOver}
+                    onDrop={() => onDrop(item.id)}
                     actions={[
-                      <DragOutlined key="drag" className="text-gray-400" />,
+                      <DragOutlined 
+                        key="drag" 
+                        className="text-gray-400 cursor-move hover:text-gray-600" 
+                        title="拖拽排序"
+                      />,
                       <Popconfirm
                         key="delete"
                         title="确定要删除这个大纲吗？"
@@ -644,14 +679,20 @@ export default function OutlineManager({ novelId }: OutlineManagerProps) {
                       </Popconfirm>
                     ]}
                   >
-                    <div className="w-full">
-                      <div className="font-medium text-gray-800">{item.title}</div>
-                      <div className="text-xs text-gray-400">{new Date(item.modified).toLocaleString('zh-CN')}</div>
+                    <div className="w-full flex items-center gap-2">
+                      <DragOutlined className="text-gray-300 text-sm" />
+                      <div className="flex-1">
+                        <div className="font-medium text-gray-800">{item.title}</div>
+                        <div className="text-xs text-gray-400">{new Date(item.modified).toLocaleString('zh-CN')}</div>
+                      </div>
                     </div>
                   </List.Item>
                 )}
               />
             )}
+            <div className="text-xs text-gray-400 mt-2 text-center">
+              拖拽大纲项目可调整显示顺序
+            </div>
           </Card>
         </div>
       </Sider>

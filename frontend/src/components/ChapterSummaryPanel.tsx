@@ -58,7 +58,13 @@ export default function ChapterSummaryPanel({ novelId, getText, currentChapter }
       const res = await fetch('/api/ai/summarize', { 
         method: 'POST', 
         headers, 
-        body: JSON.stringify({ text, max_sentences: maxSentences }) 
+        body: JSON.stringify({ 
+          text, 
+          max_sentences: maxSentences,
+          summary_type: 'chapter',
+          novel_id: novelId,
+          chapter_number: currentChapter?.order
+        }) 
       })
       const j = await res.json()
       if (res.ok && j.ok) {

@@ -215,14 +215,30 @@ export default function AIPromptCharacterSettings() {
     const characterData = characterPrompts[character]
     if (!characterData) return <Text type="secondary">暂无数据</Text>
     
-    return (
-      <div>
-        <Title level={4}>{character}提示词</Title>
-        {Object.entries(characterData).map(([key, value]) => 
-          renderPromptEditor(key, value as string, character)
-        )}
-      </div>
-    )
+    // 如果characterData是字符串，直接显示
+    if (typeof characterData === 'string') {
+      return (
+        <div>
+          <Title level={4}>{character}提示词</Title>
+          {renderPromptEditor('default', characterData, character)}
+        </div>
+      )
+    }
+    
+    // 如果characterData是对象，按原来的方式处理
+    if (typeof characterData === 'object' && characterData !== null) {
+      return (
+        <div>
+          <Title level={4}>{character}提示词</Title>
+          {Object.entries(characterData).map(([key, value]) => 
+            renderPromptEditor(key, value as string, character)
+          )}
+        </div>
+      )
+    }
+    
+    // 其他情况，显示错误信息
+    return <Text type="secondary">数据格式错误</Text>
   }
 
   return (

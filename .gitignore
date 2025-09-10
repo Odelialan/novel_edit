@@ -37,6 +37,7 @@ frontend/.next/
 
 # Python
 __pycache__/
+**/__pycache__/
 *.py[cod]
 *$py.class
 *.so
@@ -78,6 +79,8 @@ test_*.py
 *_test.py
 debug_*.py
 extract_quotes.py
+test_polish.py
+test_real_ai.py
 
 # 临时文件
 *.tmp

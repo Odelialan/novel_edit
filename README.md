@@ -4,11 +4,37 @@
 
 ## 📋 版本信息
 
-- **当前版本**: v1.0.0
-- **发布日期**: 2025年9月4日
+- **当前版本**: v2.0.0
+- **发布日期**: 2025年9月10日
 - **系统作者**: OdeliaLan
 - **Git仓库**: https://github.com/Odelialan/novel_edit.git
-- **版本状态**: 初始版本，功能完整
+- **版本状态**: 功能增强版本，AI提示词系统重构
+
+### 🎉 版本2.0.0 主要特性
+
+#### 核心功能增强
+- ✅ **AI提示词系统重构**: 从JSON配置升级为Python模块化系统
+- ✅ **动态提示词生成**: 支持运行时动态生成和修改提示词
+- ✅ **提示词模板管理**: 完整的提示词模板管理系统
+- ✅ **多语言支持**: 支持中英文提示词模板
+- ✅ **提示词版本控制**: 支持提示词版本管理和回滚
+
+#### 技术架构升级
+- ✅ **模块化设计**: AI提示词系统采用Python模块化架构
+- ✅ **面向对象编程**: 使用类和方法管理提示词逻辑
+- ✅ **配置分离**: 提示词配置与业务逻辑分离
+- ✅ **扩展性增强**: 支持自定义提示词类型和模板
+
+#### 新增文件结构
+- ✅ **prompt_templates.py**: 核心提示词模板管理
+- ✅ **character.py**: 角色相关提示词模块
+- ✅ **expand.py**: 扩写相关提示词模块
+- ✅ **inspiration.py**: 灵感相关提示词模块
+- ✅ **outline.py**: 大纲相关提示词模块
+- ✅ **polish.py**: 润色相关提示词模块
+- ✅ **styles.py**: 风格相关提示词模块
+- ✅ **summary.py**: 总结相关提示词模块
+- ✅ **world.py**: 世界观相关提示词模块
 
 ### 🎉 版本1.0.0 主要特性
 
@@ -129,6 +155,39 @@ novel_edit/
    - 前端: http://localhost:3000
    - 后端API: http://localhost:8000
    - API文档: http://localhost:8000/docs
+
+### 📝 版本2.0.0 修改总结
+
+#### 2025年9月10日 - 版本2.0.0 发布
+- **AI提示词系统重构**: 从静态JSON配置升级为动态Python模块化系统
+- **提示词管理增强**: 支持运行时动态生成、修改和管理提示词模板
+- **架构优化**: 采用面向对象编程模式，提升代码可维护性和扩展性
+- **功能模块化**: 将不同类型的提示词分离为独立模块，便于管理
+- **向后兼容**: 保持与版本1.0.0的完全兼容性
+
+#### 主要技术改进
+- ✅ AI提示词系统从JSON配置迁移到Python模块化架构
+- ✅ 新增9个专门的提示词管理模块（character、expand、inspiration等）
+- ✅ 实现动态提示词生成和模板管理功能
+- ✅ 支持提示词版本控制和回滚机制
+- ✅ 提升系统扩展性和可维护性
+
+#### 新增文件
+- ✅ `novel_repo/ai_prompts/prompt_templates.py` - 核心提示词模板管理
+- ✅ `novel_repo/ai_prompts/character.py` - 角色提示词模块
+- ✅ `novel_repo/ai_prompts/expand.py` - 扩写提示词模块
+- ✅ `novel_repo/ai_prompts/inspiration.py` - 灵感提示词模块
+- ✅ `novel_repo/ai_prompts/outline.py` - 大纲提示词模块
+- ✅ `novel_repo/ai_prompts/polish.py` - 润色提示词模块
+- ✅ `novel_repo/ai_prompts/styles.py` - 风格提示词模块
+- ✅ `novel_repo/ai_prompts/summary.py` - 总结提示词模块
+- ✅ `novel_repo/ai_prompts/world.py` - 世界观提示词模块
+
+#### 安全特性保持
+- ✅ 敏感信息继续完全本地化存储
+- ✅ JWT令牌认证机制保持不变
+- ✅ 环境变量配置管理保持稳定
+- ✅ .gitignore配置持续优化
 
 ### 📝 版本1.0.0 修改总结
 
@@ -256,6 +315,7 @@ novel_edit/
    venv\Scripts\activate     # Windows
    
    pip install -r requirements.txt
+   cd backend
    python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
    ```
 

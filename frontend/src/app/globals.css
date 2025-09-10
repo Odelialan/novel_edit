@@ -52,4 +52,173 @@ body {
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background-color: #9ca3af;
+}
+
+/* AI提示词管理专用滚动条样式 - 简化版本 */
+.ai-prompt-scrollbar {
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  height: 100% !important;
+  
+  /* Firefox 滚动条样式 */
+  scrollbar-width: thin !important;
+  scrollbar-color: #1890ff #f0f0f0 !important;
+}
+
+/* Webkit 滚动条样式 - 强制显示 */
+.ai-prompt-scrollbar::-webkit-scrollbar {
+  width: 12px !important;
+  height: 12px !important;
+  display: block !important;
+  -webkit-appearance: none !important;
+  appearance: none !important;
+}
+
+.ai-prompt-scrollbar::-webkit-scrollbar-track {
+  background: #f0f0f0 !important;
+  border-radius: 6px !important;
+  border: 1px solid #e0e0e0 !important;
+}
+
+.ai-prompt-scrollbar::-webkit-scrollbar-thumb {
+  background-color: #1890ff !important;
+  border-radius: 6px !important;
+  border: 2px solid #f0f0f0 !important;
+  min-height: 20px !important;
+}
+
+.ai-prompt-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: #40a9ff !important;
+}
+
+.ai-prompt-scrollbar::-webkit-scrollbar-thumb:active {
+  background-color: #096dd9 !important;
+}
+
+.ai-prompt-scrollbar::-webkit-scrollbar-corner {
+  background: #f0f0f0 !important;
+}
+
+/* 确保滚动条在 Antd 组件中也能显示 */
+.ant-tabs-content-holder .ai-prompt-scrollbar {
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+}
+
+.ant-tabs-tabpane .ai-prompt-scrollbar {
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+}
+
+/* 修复 Ant Design Tabs 高度问题 */
+.ant-tabs-tabpane {
+  height: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+  min-height: 0 !important;
+}
+
+.ant-tabs-content-holder {
+  height: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+  min-height: 0 !important;
+}
+
+.ant-tabs-content {
+  height: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+  min-height: 0 !important;
+}
+
+/* 强制显示滚动条 - 针对 macOS overlay 滚动条 */
+.ai-prompt-scrollbar {
+  scrollbar-width: auto !important;
+}
+
+.ai-prompt-scrollbar::-webkit-scrollbar {
+  -webkit-appearance: scrollbarthumb !important;
+  appearance: scrollbarthumb !important;
+}
+
+/* 确保滚动条始终可见 */
+.ai-prompt-scrollbar::-webkit-scrollbar:vertical {
+  width: 12px !important;
+}
+
+.ai-prompt-scrollbar::-webkit-scrollbar:horizontal {
+  height: 12px !important;
+}
+
+/* AIPrompt 管理区的高度链 & 滚动隔离（高优先）*/
+.ai-prompt-root {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* 确保 Card body 继承高度链 */
+.ai-prompt-root .ant-card-body {
+  display: flex;
+  flex-direction: column;
+  height: 100% !important;
+  min-height: 0 !important;
+}
+
+/* Tabs 内容强制撑满父容器，TabPane 可收缩，子级滚动才会生效 */
+.ai-prompt-root .ant-tabs {
+  height: 100%;
+}
+.ai-prompt-root .ant-tabs-content-holder,
+.ai-prompt-root .ant-tabs-content,
+.ai-prompt-root .ant-tabs-tabpane {
+  height: 100%;
+  min-height: 0;          /* 关键：允许子项收缩以触发子滚动 */
+  display: flex;
+  flex-direction: column;
+}
+
+/* 让具体滚动区独立（你已有 .ai-prompt-scrollbar，可补强 specificity） */
+.ai-prompt-root .ai-prompt-scrollbar {
+  flex: 1 !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  min-height: 0 !important;
+  scrollbar-gutter: stable;
+}
+
+/* 滚动条样式（保留你现有样式） */
+.ai-prompt-root .ai-prompt-scrollbar::-webkit-scrollbar { 
+  width: 12px; 
+  height: 12px;
+  display: block !important;
+  -webkit-appearance: none !important;
+  appearance: none !important;
+}
+
+.ai-prompt-root .ai-prompt-scrollbar::-webkit-scrollbar-track {
+  background: #f0f0f0 !important;
+  border-radius: 6px !important;
+  border: 1px solid #e0e0e0 !important;
+}
+
+.ai-prompt-root .ai-prompt-scrollbar::-webkit-scrollbar-thumb {
+  background-color: #1890ff !important;
+  border-radius: 6px !important;
+  border: 2px solid #f0f0f0 !important;
+  min-height: 20px !important;
+}
+
+.ai-prompt-root .ai-prompt-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: #40a9ff !important;
+}
+
+.ai-prompt-root .ai-prompt-scrollbar::-webkit-scrollbar-thumb:active {
+  background-color: #096dd9 !important;
+}
+
+.ai-prompt-root .ai-prompt-scrollbar::-webkit-scrollbar-corner {
+  background: #f0f0f0 !important;
 } 

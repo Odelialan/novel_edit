@@ -132,3 +132,66 @@ async def update_daily_stats(
             ok=False,
             error={"code": "500", "msg": f"更新统计失败: {str(e)}"}
         )
+
+@router.get("/novels/{novel_id}/stats/weekly", response_model=APIResponse)
+async def get_weekly_stats(
+    novel_id: str,
+    weeks: int = 12,
+    current_user: dict = Depends(get_current_user)
+):
+    """获取每周写作统计"""
+    try:
+        stats = stats_service.get_weekly_stats(novel_id, weeks)
+        return APIResponse(ok=True, data={"stats": stats})
+    except Exception as e:
+        return APIResponse(
+            ok=False,
+            error={"code": "500", "msg": f"获取周统计失败: {str(e)}"}
+        )
+
+@router.get("/novels/{novel_id}/stats/monthly", response_model=APIResponse)
+async def get_monthly_stats(
+    novel_id: str,
+    months: int = 12,
+    current_user: dict = Depends(get_current_user)
+):
+    """获取每月写作统计"""
+    try:
+        stats = stats_service.get_monthly_stats(novel_id, months)
+        return APIResponse(ok=True, data={"stats": stats})
+    except Exception as e:
+        return APIResponse(
+            ok=False,
+            error={"code": "500", "msg": f"获取月统计失败: {str(e)}"}
+        )
+
+@router.get("/novels/{novel_id}/stats/yearly", response_model=APIResponse)
+async def get_yearly_stats(
+    novel_id: str,
+    years: int = 3,
+    current_user: dict = Depends(get_current_user)
+):
+    """获取每年写作统计"""
+    try:
+        stats = stats_service.get_yearly_stats(novel_id, years)
+        return APIResponse(ok=True, data={"stats": stats})
+    except Exception as e:
+        return APIResponse(
+            ok=False,
+            error={"code": "500", "msg": f"获取年统计失败: {str(e)}"}
+        )
+
+@router.get("/novels/{novel_id}/stats/comprehensive", response_model=APIResponse)
+async def get_comprehensive_stats(
+    novel_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """获取综合统计数据"""
+    try:
+        stats = stats_service.get_comprehensive_stats(novel_id)
+        return APIResponse(ok=True, data=stats)
+    except Exception as e:
+        return APIResponse(
+            ok=False,
+            error={"code": "500", "msg": f"获取综合统计失败: {str(e)}"}
+        )

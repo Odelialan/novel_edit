@@ -20,22 +20,11 @@ async def generate_inspiration(
 ):
     """AI生成故事灵感"""
     try:
-        # 读取world.json中的提示词
-        world_prompts_path = file_service.novel_repo_path / "ai_prompts" / "world.json"
-        if not world_prompts_path.exists():
-            return APIResponse(
-                ok=False,
-                error={"code": "404", "msg": "提示词文件不存在"}
-            )
-        
-        with open(world_prompts_path, 'r', encoding='utf-8') as f:
-            world_prompts = json.load(f)
-        
-        # 构建完整的提示词
-        prompt = world_prompts.get("random", "")
+        # 使用AI服务加载世界观提示词
+        prompt_template = await ai_service._load_world_prompt("random")
         
         # 将前端参数替换到提示词占位符中
-        full_prompt = prompt.replace('{GENRE}', request.get('genre', ''))
+        full_prompt = prompt_template.replace('{GENRE}', request.get('genre', ''))
         full_prompt = full_prompt.replace('{LENGTH}', request.get('length', ''))
         full_prompt = full_prompt.replace('{TAGS}', ', '.join(request.get('tags', [])))
         
@@ -49,8 +38,8 @@ async def generate_inspiration(
         # 调用AI服务生成灵感
         result = await ai_service.expand_text(
             novel_id="inspiration",
-            prompt_template="故事灵感生成",
-            input_summary=full_prompt,
+            prompt_template=full_prompt,
+            input_summary="请根据提示词生成故事灵感",
             style="default",
             max_tokens=1500
         )
@@ -122,7 +111,10 @@ async def summarize_text(
     try:
         result = await ai_service.summarize_text(
             request.text,
-            request.max_sentences
+            request.max_sentences,
+            request.summary_type,
+            request.novel_id,
+            request.chapter_number
         )
         
         return APIResponse(
@@ -225,6 +217,87 @@ async def get_chapter_summary(
             error={"code": "500", "msg": f"读取概要失败: {str(e)}"}
         )
 
+@router.post("/full-novel-summary", response_model=APIResponse)
+async def generate_full_novel_summary(
+    request: dict,
+    current_user: dict = Depends(get_current_user)
+):
+    """生成全文概要"""
+    try:
+        novel_id = request.get('novel_id')
+        max_sentences = request.get('max_sentences', 10)
+        
+        if not novel_id:
+            return APIResponse(
+                ok=False,
+                error={"code": "400", "msg": "缺少novel_id参数"}
+            )
+        
+        # 生成全文概要
+        result = await ai_service.summarize_text(
+            text="",  # 全文概要不需要传入文本，会从占位符获取
+            max_sentences=max_sentences,
+            summary_type="full_novel",
+            novel_id=novel_id
+        )
+        
+        return APIResponse(
+            ok=True,
+            data={"result_summary": result}
+        )
+    except Exception as e:
+        return APIResponse(
+            ok=False,
+            error={"code": "500", "msg": f"生成全文概要失败: {str(e)}"}
+        )
+
+@router.post("/full-novel-summary/save", response_model=APIResponse)
+async def save_full_novel_summary(
+    request: dict,
+    current_user: dict = Depends(get_current_user)
+):
+    """保存全文概要到文件"""
+    try:
+        novel_id = request.get('novel_id')
+        summary_content = request.get('summary_content')
+        
+        if not all([novel_id, summary_content]):
+            return APIResponse(
+                ok=False,
+                error={"code": "400", "msg": "缺少必要参数"}
+            )
+        
+        # 确保项目目录下的summaries目录存在
+        novel_path = file_service.novel_repo_path / novel_id
+        summaries_dir = novel_path / "summaries"
+        summaries_dir.mkdir(exist_ok=True)
+        
+        # 使用自动编号工具生成文件名
+        from app.utils.file_naming import FileNamingUtils
+        filename = FileNamingUtils.generate_numbered_filename(
+            base_name="full_novel_summary",
+            directory=summaries_dir,
+            extension='.md'
+        )
+        file_path = summaries_dir / filename
+        
+        # 写入概要内容
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.write(summary_content)
+        
+        return APIResponse(
+            ok=True,
+            data={
+                "message": "全文概要已保存",
+                "file_path": f"{novel_id}/summaries/{filename}"
+            }
+        )
+    except Exception as e:
+        return APIResponse(
+            ok=False,
+            error={"code": "500", "msg": f"保存全文概要失败: {str(e)}"}
+        )
+
 @router.post("/stream")
 async def stream_expand(
     request: AIExpandRequest,
@@ -293,23 +366,19 @@ async def generate_outline(
                 error={"code": "400", "msg": "缺少小说ID"}
             )
         
-        # 根据outline_type读取对应的提示词文件
-        outline_prompts_path = file_service.novel_repo_path / "ai_prompts" / "outline" / f"{outline_type}.json"
-        if not outline_prompts_path.exists():
+        # 使用AI服务加载大纲提示词
+        try:
+            prompt_template = await ai_service._load_outline_prompt(outline_type)
+        except:
             return APIResponse(
                 ok=False,
-                error={"code": "404", "msg": f"提示词文件 {outline_type}.json 不存在"}
+                error={"code": "404", "msg": f"提示词类型 {outline_type} 不存在"}
             )
         
-        with open(outline_prompts_path, 'r', encoding='utf-8') as f:
-            outline_prompts = json.load(f)
-        
-        # 使用targeted提示词模板（定向生成）
-        prompt_template = outline_prompts.get("targeted", "")
         if not prompt_template:
             return APIResponse(
                 ok=False,
-                error={"code": "404", "msg": "targeted提示词模板不存在"}
+                error={"code": "404", "msg": "提示词模板不存在"}
             )
         
         # 构建完整的提示词，自动填充小说信息

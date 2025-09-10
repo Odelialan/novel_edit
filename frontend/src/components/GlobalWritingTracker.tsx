@@ -237,7 +237,7 @@ export default function GlobalWritingTracker({}: GlobalWritingTrackerProps) {
               <Text>总体写作进度</Text>
               <Text type="secondary">{globalStats.progress_percentage}%</Text>
             </div>
-            <Progress percent={globalStats.progress_percentage} size="large" />
+            <Progress percent={globalStats.progress_percentage} />
           </div>
           
           <Row gutter={16}>
@@ -290,17 +290,17 @@ export default function GlobalWritingTracker({}: GlobalWritingTrackerProps) {
                 <Row gutter={16}>
                   {globalGoals.daily_words && (
                     <Col span={8}>
-                      <Statistic title="日目标" value={globalGoals.daily_words} suffix="字" size="small" />
+                      <Statistic title="日目标" value={globalGoals.daily_words} suffix="字" />
                     </Col>
                   )}
                   {globalGoals.weekly_words && (
                     <Col span={8}>
-                      <Statistic title="周目标" value={globalGoals.weekly_words} suffix="字" size="small" />
+                      <Statistic title="周目标" value={globalGoals.weekly_words} suffix="字" />
                     </Col>
                   )}
                   {globalGoals.monthly_words && (
                     <Col span={8}>
-                      <Statistic title="月目标" value={globalGoals.monthly_words} suffix="字" size="small" />
+                      <Statistic title="月目标" value={globalGoals.monthly_words} suffix="字" />
                     </Col>
                   )}
                 </Row>
@@ -329,7 +329,7 @@ export default function GlobalWritingTracker({}: GlobalWritingTrackerProps) {
                     </div>
                     <div className="text-right">
                       <div className="text-sm font-medium">{novel.progress_percentage}%</div>
-                      <Progress percent={novel.progress_percentage} size="small" showInfo={false} />
+                      <Progress percent={novel.progress_percentage} showInfo={false} />
                     </div>
                   </div>
                 ))}

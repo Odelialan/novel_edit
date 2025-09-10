@@ -30,6 +30,9 @@ export default function AIOutlinePanel({ novelId, outlineType, onApplied }: AIOu
   const [novelInfo, setNovelInfo] = useState<NovelInfo>({})
   const [selectedPromptType, setSelectedPromptType] = useState<string>(outlineType || 'story_background')
   const [output, setOutput] = useState<string>('')
+  const [promptTemplate, setPromptTemplate] = useState<string>('')
+  const [isEditingPrompt, setIsEditingPrompt] = useState(false)
+  const [editingPrompt, setEditingPrompt] = useState('')
 
   const outlineTypes = [
     { key: 'story_background', label: '故事背景设定', description: '生成小说的世界观、地理环境、社会制度等背景设定' },
@@ -45,13 +48,30 @@ export default function AIOutlinePanel({ novelId, outlineType, onApplied }: AIOu
 
   useEffect(() => {
     loadNovelInfo()
-  }, [novelId])
+    loadPrompt()
+  }, [novelId, token])
 
   useEffect(() => {
     if (outlineType) {
       setSelectedPromptType(outlineType)
     }
   }, [outlineType])
+
+  const loadPrompt = async () => {
+    try {
+      const res = await fetch('/api/utils/prompts?scope=global', { headers })
+      if (res.ok) {
+        const result = await res.json()
+        if (result.ok) {
+          // 根据选中的类型加载对应的提示词
+          const outlinePrompts = result.data?.prompts?.outline || {}
+          setPromptTemplate(outlinePrompts[selectedPromptType] || '')
+        }
+      }
+    } catch (error) {
+      console.error('加载大纲提示词失败:', error)
+    }
+  }
 
   const loadNovelInfo = async () => {
     try {
@@ -153,6 +173,70 @@ export default function AIOutlinePanel({ novelId, outlineType, onApplied }: AIOu
 
   return (
     <div className="space-y-4">
+      {promptTemplate && (
+        <div className="mb-4 p-3 bg-gray-50 rounded border">
+          <div className="flex justify-between items-center mb-2">
+            <div className="text-sm font-medium">当前提示词模板：</div>
+            <Space>
+              <Button 
+                size="small" 
+                onClick={() => {
+                  setEditingPrompt(promptTemplate)
+                  setIsEditingPrompt(true)
+                }}
+              >
+                编辑
+              </Button>
+              <Button 
+                size="small" 
+                onClick={() => {
+                  navigator.clipboard.writeText(promptTemplate)
+                  message.success('已复制到剪贴板')
+                }}
+              >
+                复制
+              </Button>
+            </Space>
+          </div>
+          {isEditingPrompt ? (
+            <div>
+              <TextArea
+                value={editingPrompt}
+                onChange={(e) => setEditingPrompt(e.target.value)}
+                rows={8}
+                className="mb-2"
+              />
+              <Space>
+                <Button 
+                  size="small" 
+                  type="primary"
+                  onClick={() => {
+                    setPromptTemplate(editingPrompt)
+                    setIsEditingPrompt(false)
+                    message.success('提示词已更新')
+                  }}
+                >
+                  保存
+                </Button>
+                <Button 
+                  size="small"
+                  onClick={() => {
+                    setEditingPrompt(promptTemplate)
+                    setIsEditingPrompt(false)
+                  }}
+                >
+                  取消
+                </Button>
+              </Space>
+            </div>
+          ) : (
+            <div className="text-xs text-gray-600 whitespace-pre-wrap max-h-32 overflow-y-auto">
+              {promptTemplate}
+            </div>
+          )}
+        </div>
+      )}
+      
       <div className="bg-green-50 p-3 rounded border border-green-200">
         <div className="text-sm text-green-800 font-medium mb-2">✅ 自动读取信息</div>
         <div className="text-xs text-green-700 space-y-1">
@@ -200,6 +284,7 @@ export default function AIOutlinePanel({ novelId, outlineType, onApplied }: AIOu
           <MonacoEditorComponent
             value={output}
             onChange={setOutput}
+            onSave={() => {}} // 大纲生成结果不需要保存功能
             language="markdown"
             readOnly={false}
             novelId={novelId}

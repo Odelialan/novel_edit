@@ -254,9 +254,7 @@ export default function MainApp() {
         )
       case 'prompts':
         return (
-          <div className="max-w-4xl mx-auto">
-            <AIPromptManager />
-          </div>
+          <AIPromptManager />
         )
       case 'prompts-expand':
         return (<div className="max-w-4xl mx-auto"><AIPromptExpandSettings /></div>)
@@ -440,7 +438,7 @@ export default function MainApp() {
   ]
 
   return (
-    <Layout className="min-h-screen">
+    <Layout className="h-screen">
       <Sider 
         trigger={null} 
         collapsible 
@@ -496,7 +494,9 @@ export default function MainApp() {
           </Space>
         </Header>
 
-        <Content className="p-6 bg-gray-50 overflow-auto">
+        <Content className="p-6 bg-gray-50 overflow-auto" style={{ 
+          flex: 1
+        }}>
           {renderContent()}
         </Content>
       </Layout>

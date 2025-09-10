@@ -30,17 +30,19 @@ export default function AIPanel({ novelId, onAppendResult }: AIPanelProps) {
         let tpl: string | undefined
         if (res.ok) {
           const result = await res.json()
-          if (result.ok) tpl = result.data?.prompts?.expand
+          if (result.ok) tpl = result.data?.prompts?.expand?.sentence
         }
         if (!tpl) {
           res = await fetch('/api/utils/prompts?scope=global', { headers })
           if (res.ok) {
             const result = await res.json()
-            if (result.ok) tpl = result.data?.prompts?.expand
+            if (result.ok) tpl = result.data?.prompts?.expand?.sentence
           }
         }
         if (tpl) setPromptTemplate(tpl)
-      } catch {}
+      } catch (error) {
+        console.error('加载提示词失败:', error)
+      }
     }
     loadPrompt()
   }, [novelId, token])

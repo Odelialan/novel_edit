@@ -61,6 +61,20 @@ export default function MonacoEditorComponent({
       folding: true,
       lineDecorationsWidth: 10,
       lineNumbersMinChars: 3,
+      scrollbar: {
+        vertical: 'auto',
+        horizontal: 'auto',
+        verticalScrollbarSize: 12,
+        horizontalScrollbarSize: 12,
+        useShadows: true,
+        verticalHasArrows: false,
+        horizontalHasArrows: false,
+        verticalSliderSize: 12,
+        horizontalSliderSize: 12,
+        arrowSize: 11,
+        verticalSliderHasArrows: false,
+        horizontalSliderHasArrows: false,
+      },
     })
 
     if (onExposeEditorApi) {
@@ -404,6 +418,18 @@ export default function MonacoEditorComponent({
             folding: true,
             lineDecorationsWidth: 10,
             lineNumbersMinChars: 3,
+            scrollbar: {
+              vertical: 'auto',
+              horizontal: 'auto',
+              verticalScrollbarSize: 12,
+              horizontalScrollbarSize: 12,
+              useShadows: true,
+              verticalHasArrows: false,
+              horizontalHasArrows: false,
+              verticalSliderSize: 12,
+              horizontalSliderSize: 12,
+              arrowSize: 11,
+            },
           }}
         />
       </div>

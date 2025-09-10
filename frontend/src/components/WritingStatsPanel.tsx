@@ -199,12 +199,11 @@ export default function WritingStatsPanel({ novelId }: WritingStatsPanelProps) {
   }
 
   return (
-    <Card size="small" title={<span><TrophyOutlined className="mr-2" />写作统计</span>} extra={
-      <Button size="small" icon={<EditOutlined />} onClick={openGoalModal}>设置目标</Button>
+    <Card  title={<span><TrophyOutlined className="mr-2" />写作统计</span>} extra={
+      <Button  icon={<EditOutlined />} onClick={openGoalModal}>设置目标</Button>
     }>
       <Tabs 
         defaultActiveKey="overview" 
-        size="small"
         items={[
           {
             key: 'overview',
@@ -217,7 +216,7 @@ export default function WritingStatsPanel({ novelId }: WritingStatsPanelProps) {
                       <Text>总体进度</Text>
                       <Text type="secondary">{progress.progress_percentage}%</Text>
                     </div>
-                    <Progress percent={progress.progress_percentage} size="small" />
+                    <Progress percent={progress.progress_percentage}  />
                     <Row gutter={16} className="mt-3">
                       <Col span={8}>
                         <Statistic title="总字数" value={progress.total_words} suffix="字" />
@@ -236,14 +235,14 @@ export default function WritingStatsPanel({ novelId }: WritingStatsPanelProps) {
                   <div className="mb-4">
                     <Row gutter={16}>
                       <Col span={12}>
-                        <Card size="small" className="text-center">
+                        <Card  className="text-center">
                           <FireOutlined className="text-2xl text-orange-500 mb-2" />
                           <div className="text-lg font-bold">{streak.current_streak}</div>
                           <div className="text-xs text-gray-500">连续写作天数</div>
                         </Card>
                       </Col>
                       <Col span={12}>
-                        <Card size="small" className="text-center">
+                        <Card  className="text-center">
                           <TrophyOutlined className="text-2xl text-yellow-500 mb-2" />
                           <div className="text-lg font-bold">{streak.longest_streak}</div>
                           <div className="text-xs text-gray-500">最长连续天数</div>
@@ -259,17 +258,17 @@ export default function WritingStatsPanel({ novelId }: WritingStatsPanelProps) {
                     <Row gutter={16}>
                       {goals.daily_words && (
                         <Col span={8}>
-                          <Statistic title="日目标" value={goals.daily_words} suffix="字" size="small" />
+                          <Statistic title="日目标" value={goals.daily_words} suffix="字"  />
                         </Col>
                       )}
                       {goals.weekly_words && (
                         <Col span={8}>
-                          <Statistic title="周目标" value={goals.weekly_words} suffix="字" size="small" />
+                          <Statistic title="周目标" value={goals.weekly_words} suffix="字"  />
                         </Col>
                       )}
                       {goals.monthly_words && (
                         <Col span={8}>
-                          <Statistic title="月目标" value={goals.monthly_words} suffix="字" size="small" />
+                          <Statistic title="月目标" value={goals.monthly_words} suffix="字"  />
                         </Col>
                       )}
                     </Row>

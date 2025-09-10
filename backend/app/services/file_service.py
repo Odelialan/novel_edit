@@ -37,7 +37,19 @@ class FileService:
             if not (project_root / "novel_repo").exists():
                 project_root = Path.cwd().parent
                 
-            resolved = (project_root / raw_repo_path).resolve()
+            # 如果使用相对路径，直接拼接项目根目录
+            if raw_repo_path.startswith('../'):
+                resolved = project_root / raw_repo_path[3:]  # 去掉 '../'
+            else:
+                resolved = (project_root / raw_repo_path).resolve()
+            
+            # 最终验证：确保路径存在
+            if not resolved.exists():
+                # 如果还是找不到，尝试直接使用绝对路径
+                absolute_path = Path("I:/novel_edit/novel_repo")
+                if absolute_path.exists():
+                    resolved = absolute_path
+                    print(f"Using fallback absolute path: {resolved}")
 
         self.novel_repo_path = resolved
         print(f"FileService initialized with path: {self.novel_repo_path}")

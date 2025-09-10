@@ -40,7 +40,9 @@ export default function AIRewritePanel({ novelId, editorApi }: AIRewritePanelPro
       form.setFieldsValue({ mode: 'sentence', other: '', pov: '第三人称', input: (editorApi?.getSelectedText?.() || ''), style: data?.styles?.current || '' })
       ;(form as any).__defaults = defaults
       ;(form as any).__style = data?.styles?.current || ''
-    } catch {}
+    } catch (error) {
+      console.error('加载提示词失败:', error)
+    }
   }
 
   const loadCharacters = async () => {

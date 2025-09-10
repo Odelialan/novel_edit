@@ -27,11 +27,11 @@ class Settings:
     MAX_VERSIONS = int(os.getenv("MAX_VERSIONS", "100"))
     
     # AI 配置
-    AI_PROVIDER = os.getenv("AI_PROVIDER", "mock")  # openai|mock|local|gemini
+    AI_PROVIDER = os.getenv("AI_PROVIDER", "gemini")  # openai|gemini
     OPENAI_API_KEY: Optional[str] = os.getenv("OPENAI_API_KEY")
     OPENAI_BASE_URL: Optional[str] = os.getenv("OPENAI_BASE_URL")
-    GEMINI_API_KEY: Optional[str] = os.getenv("GEMINI_API_KEY")
-    GEMINI_BASE_URL: Optional[str] = os.getenv("GEMINI_BASE_URL")
+    GEMINI_API_KEY: Optional[str] = os.getenv("GEMINI_API_KEY", "AIzaSyCInbV8U7tLhPr-PU1SCtJ8c0vjv7gtlpQ")
+    GEMINI_BASE_URL: Optional[str] = os.getenv("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com")
     
     # ngrok 配置
     NGROK_AUTHTOKEN: Optional[str] = os.getenv("NGROK_AUTHTOKEN", "31rO5I3GTPQ0afK5dhTYG5Fiedl_5CSrB7fV6ganx8BfwzvaR")

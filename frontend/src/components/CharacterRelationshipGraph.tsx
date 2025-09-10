@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { Card, Typography, Button, Space, message, Spin } from 'antd'
+import { Card, Typography, Button, Space, Spin, App } from 'antd'
 import { ShareAltOutlined, FullscreenOutlined, ReloadOutlined } from '@ant-design/icons'
 
 const { Title } = Typography
@@ -22,6 +22,7 @@ interface CharacterRelationshipGraphProps {
 }
 
 export default function CharacterRelationshipGraph({ characters, loading = false }: CharacterRelationshipGraphProps) {
+  const { message } = App.useApp()
   const networkRef = useRef<HTMLDivElement>(null)
   const [network, setNetwork] = useState<any>(null)
   const [isFullscreen, setIsFullscreen] = useState(false)
@@ -52,25 +53,25 @@ export default function CharacterRelationshipGraph({ characters, loading = false
         )
 
         // 准备边数据
-        const edges = new DataSet(
-          characters.flatMap(char =>
-            char.relationships.map((rel, index) => {
-              const targetChar = characters.find(c => c.name === rel.target || c.id === rel.target)
-              if (!targetChar) return null
-              
-              return {
-                id: `${char.id}-${targetChar.id}-${index}`,
-                from: char.id,
-                to: targetChar.id,
-                label: rel.relation,
-                color: { color: '#848484' },
-                font: { size: 12, color: '#333333', strokeWidth: 3, strokeColor: '#ffffff' },
-                arrows: 'to',
-                smooth: { type: 'continuous' }
-              }
-            }).filter(Boolean)
-          )
-        )
+        const edgeData = characters.flatMap(char =>
+          char.relationships.map((rel, index) => {
+            const targetChar = characters.find(c => c.name === rel.target || c.id === rel.target)
+            if (!targetChar) return null
+            
+            return {
+              id: `${char.id}-${targetChar.id}-${index}`,
+              from: char.id,
+              to: targetChar.id,
+              label: rel.relation,
+              color: { color: '#848484' },
+              font: { size: 12, color: '#333333', strokeWidth: 3, strokeColor: '#ffffff' },
+              arrows: 'to',
+              smooth: { enabled: true, type: 'continuous', roundness: 0.5 }
+            }
+          })
+        ).filter((item): item is NonNullable<typeof item> => item !== null)
+        
+        const edges = new DataSet(edgeData)
 
         const data = { nodes, edges }
 
@@ -105,12 +106,14 @@ export default function CharacterRelationshipGraph({ characters, loading = false
             width: 2,
             shadow: true,
             smooth: {
+              enabled: true,
               type: 'continuous',
               roundness: 0.5
             }
           }
         }
 
+        if (!networkRef.current) return
         const networkInstance = new Network(networkRef.current, data, options)
         setNetwork(networkInstance)
 

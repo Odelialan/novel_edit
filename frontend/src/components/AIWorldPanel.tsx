@@ -27,11 +27,29 @@ export default function AIWorldPanel({ novelId }: AIWorldPanelProps) {
   const [results, setResults] = useState<GenerationResult[]>([])
   const [loading, setLoading] = useState(false)
   const [activeTab, setActiveTab] = useState('setting')
+  const [promptTemplate, setPromptTemplate] = useState('')
+  const [isEditingPrompt, setIsEditingPrompt] = useState(false)
+  const [editingPrompt, setEditingPrompt] = useState('')
   const headers = useMemo(() => ({ 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }), [token])
 
   useEffect(() => {
     loadResults()
-  }, [novelId])
+    loadPrompt()
+  }, [novelId, token])
+
+  const loadPrompt = async () => {
+    try {
+      const res = await fetch('/api/utils/prompts?scope=global', { headers })
+      if (res.ok) {
+        const result = await res.json()
+        if (result.ok) {
+          setPromptTemplate(result.data?.prompts?.world?.random || '')
+        }
+      }
+    } catch (error) {
+      console.error('加载世界观提示词失败:', error)
+    }
+  }
 
   const loadResults = async () => {
     try {
@@ -58,13 +76,22 @@ export default function AIWorldPanel({ novelId }: AIWorldPanelProps) {
       const values = await form.validateFields()
       setLoading(true)
 
-      // 根据类型构建不同的提示词
-      let promptTemplate = ''
+      // 使用从API加载的提示词模板
+      let fullPrompt = promptTemplate || ''
       let promptType = ''
 
-      switch (type) {
-        case 'setting':
-          promptTemplate = `基于以下要素生成世界观设定：
+      // 替换提示词中的占位符
+      if (fullPrompt) {
+        fullPrompt = fullPrompt.replace('{GENRE}', values.genre || '奇幻')
+        fullPrompt = fullPrompt.replace('{LENGTH}', values.length || '中篇')
+        fullPrompt = fullPrompt.replace('{TAGS}', (values.tags || []).join(', '))
+        fullPrompt = fullPrompt.replace('{HEROINE_ROLE}', values.heroine_role || '（自动生成）')
+        fullPrompt = fullPrompt.replace('{HERO_ROLE}', values.hero_role || '（自动生成）')
+      } else {
+        // 如果API加载失败，使用默认提示词
+        switch (type) {
+          case 'setting':
+            fullPrompt = `基于以下要素生成世界观设定：
 类型：${values.genre || '奇幻'}
 风格：${values.style || '史诗'}
 元素：${values.elements || '魔法、剑术'}
@@ -75,11 +102,11 @@ export default function AIWorldPanel({ novelId }: AIWorldPanelProps) {
 2. 核心规则
 3. 特色元素
 4. 文化特色`
-          promptType = '世界观设定'
-          break
+            promptType = '世界观设定'
+            break
 
-        case 'location':
-          promptTemplate = `基于以下要素生成地点描述：
+          case 'location':
+            fullPrompt = `基于以下要素生成地点描述：
 地点类型：${values.locationType || '城市'}
 地理位置：${values.geography || '平原'}
 文化背景：${values.culture || '古代'}
@@ -90,11 +117,11 @@ export default function AIWorldPanel({ novelId }: AIWorldPanelProps) {
 2. 建筑风格
 3. 人文环境
 4. 历史传说`
-          promptType = '地点描述'
-          break
+            promptType = '地点描述'
+            break
 
-        case 'history':
-          promptTemplate = `基于以下要素生成历史事件：
+          case 'history':
+            fullPrompt = `基于以下要素生成历史事件：
 时代背景：${values.era || '古代'}
 事件类型：${values.eventType || '战争'}
 影响范围：${values.scope || '全国'}
@@ -105,11 +132,11 @@ export default function AIWorldPanel({ novelId }: AIWorldPanelProps) {
 2. 发展过程
 3. 关键人物
 4. 历史影响`
-          promptType = '历史事件'
-          break
+            promptType = '历史事件'
+            break
 
-        case 'culture':
-          promptTemplate = `基于以下要素生成文化设定：
+          case 'culture':
+            fullPrompt = `基于以下要素生成文化设定：
 文化类型：${values.cultureType || '魔法文化'}
 社会结构：${values.socialStructure || '等级制'}
 信仰体系：${values.beliefSystem || '多神教'}
@@ -120,14 +147,15 @@ export default function AIWorldPanel({ novelId }: AIWorldPanelProps) {
 2. 信仰体系
 3. 艺术文化
 4. 风俗习惯`
-          promptType = '文化设定'
-          break
+            promptType = '文化设定'
+            break
 
-        default:
-          promptTemplate = `基于以下要素生成内容：
+          default:
+            fullPrompt = `基于以下要素生成内容：
 类型：${values.genre || '奇幻'}
 要求：${values.requirements || '详细且富有想象力'}`
-          promptType = '通用生成'
+            promptType = '通用生成'
+        }
       }
 
       // 调用AI API生成内容
@@ -136,7 +164,7 @@ export default function AIWorldPanel({ novelId }: AIWorldPanelProps) {
         headers,
         body: JSON.stringify({
           novel_id: novelId,
-          prompt_template: promptTemplate,
+          prompt_template: fullPrompt,
           input_summary: values.context || '',
           style: values.style || 'default',
           max_tokens: 800
@@ -215,6 +243,70 @@ export default function AIWorldPanel({ novelId }: AIWorldPanelProps) {
 
   return (
     <Card title={<span><RobotOutlined className="mr-2" />AI 世界观生成</span>}>
+      {promptTemplate && (
+        <div className="mb-4 p-3 bg-gray-50 rounded border">
+          <div className="flex justify-between items-center mb-2">
+            <div className="text-sm font-medium">当前提示词模板：</div>
+            <Space>
+              <Button 
+                size="small" 
+                onClick={() => {
+                  setEditingPrompt(promptTemplate)
+                  setIsEditingPrompt(true)
+                }}
+              >
+                编辑
+              </Button>
+              <Button 
+                size="small" 
+                onClick={() => {
+                  navigator.clipboard.writeText(promptTemplate)
+                  message.success('已复制到剪贴板')
+                }}
+              >
+                复制
+              </Button>
+            </Space>
+          </div>
+          {isEditingPrompt ? (
+            <div>
+              <TextArea
+                value={editingPrompt}
+                onChange={(e) => setEditingPrompt(e.target.value)}
+                rows={8}
+                className="mb-2"
+              />
+              <Space>
+                <Button 
+                  size="small" 
+                  type="primary"
+                  onClick={() => {
+                    setPromptTemplate(editingPrompt)
+                    setIsEditingPrompt(false)
+                    message.success('提示词已更新')
+                  }}
+                >
+                  保存
+                </Button>
+                <Button 
+                  size="small"
+                  onClick={() => {
+                    setEditingPrompt(promptTemplate)
+                    setIsEditingPrompt(false)
+                  }}
+                >
+                  取消
+                </Button>
+              </Space>
+            </div>
+          ) : (
+            <div className="text-xs text-gray-600 whitespace-pre-wrap max-h-32 overflow-y-auto">
+              {promptTemplate}
+            </div>
+          )}
+        </div>
+      )}
+      
       <Tabs
         activeKey={activeTab}
         onChange={setActiveTab}
@@ -507,7 +599,7 @@ export default function AIWorldPanel({ novelId }: AIWorldPanelProps) {
                             </div>
                             <div className="flex items-center gap-2">
                               {result.tags.map(tag => (
-                                <Tag key={tag} size="small">{tag}</Tag>
+                                <Tag key={tag}>{tag}</Tag>
                               ))}
                             </div>
                             <div className="text-xs text-gray-400 mt-1">
